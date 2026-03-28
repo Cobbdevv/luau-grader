@@ -1,0 +1,28 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Tauri
+/src-tauri/target/
+/src-tauri/gen/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Build artifacts
+*.exe
+*.msi
+*.nsis
+/bundle/
+
+# Test files
+test_sample.luau

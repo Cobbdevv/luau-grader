@@ -1,0 +1,17 @@
+[package]
+name = "luau-grader-cli"
+version = "0.1.0"
+edition = "2024"
+description = "CLI for grading Luau code quality"
+license = "MIT"
+repository = "https://github.com/Cobb-Dev/luau-grader"
+
+[[bin]]
+name = "luau-grader"
+path = "src/main.rs"
+
+[dependencies]
+luau-grader-core = { path = "../luau-grader-core" }
+clap = { version = "4", features = ["derive"] }
+colored = "2"
+serde_json = "1"

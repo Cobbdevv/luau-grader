@@ -1,0 +1,33 @@
+{
+    "tier": "front_page",
+    "disabled_rules": [],
+    "severity_overrides": {
+        "B001": "Error"
+    },
+    "params": {
+        "I001": { "max_lines": 40 },
+        "I002": { "exceptions": ["i", "j", "k", "_"] },
+        "B005": { "default_timeout": 10 }
+    },
+    "custom_rules": [
+        {
+            "id": "C001",
+            "description": "No print() in production code",
+            "severity": "Warning",
+            "category": "Code Hygiene",
+            "tier": "Beginner",
+            "pattern": { "type": "function_call", "name": "print" },
+            "message": "remove print() calls before shipping to production",
+            "suggestion": "use a logging module or remove entirely"
+        },
+        {
+            "id": "C002",
+            "description": "Avoid warn() in production",
+            "severity": "Info",
+            "category": "Code Hygiene",
+            "tier": "Beginner",
+            "pattern": { "type": "function_call", "name": "warn" },
+            "message": "warn() should be replaced with structured logging"
+        }
+    ]
+}
