@@ -1,0 +1,3 @@
+[workspace]
+members = ["luau-grader-core", "src-tauri", "luau-grader-cli"]
+resolver = "2"

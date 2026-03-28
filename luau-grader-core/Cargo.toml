@@ -1,0 +1,13 @@
+[package]
+name = "luau-grader-core"
+version = "0.1.0"
+edition = "2024"
+description = "Static analysis and grading engine for Luau code"
+license = "MIT"
+repository = "https://github.com/Cobb-Dev/luau-grader"
+
+[dependencies]
+full_moon = { version = "2.1", features = ["luau"] }
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
