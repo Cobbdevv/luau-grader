@@ -1,6 +1,15 @@
-# Luau Auto-Grader
+<p align="center">
+  <img src="assets/logo.png" width="120" alt="Luau Grader logo">
+</p>
 
-[![CI](https://github.com/Cobb-Dev/luau-grader/actions/workflows/ci.yml/badge.svg)](https://github.com/Cobb-Dev/luau-grader/actions)
+<h1 align="center">Luau Auto-Grader</h1>
+
+<p align="center">
+  <a href="https://github.com/Cobbdevv/luau-grader/actions/workflows/ci.yml"><img src="https://github.com/Cobbdevv/luau-grader/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI"></a>
+  <img src="https://img.shields.io/badge/language-Rust-orange" alt="Rust">
+  <img src="https://img.shields.io/badge/platform-Windows-blue" alt="Windows">
+  <img src="https://img.shields.io/github/license/Cobbdevv/luau-grader" alt="License">
+</p>
 
 A high-performance desktop application and CLI for grading Luau code against professional development standards. Built with Rust and Tauri.
 
