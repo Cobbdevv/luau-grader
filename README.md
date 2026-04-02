@@ -2,98 +2,192 @@
   <img src="assets/logo.png" width="120" alt="Luau Grader logo">
 </p>
 
-<h1 align="center">Luau Auto-Grader</h1>
+<h1 align="center">Luau Grader</h1>
 
 <p align="center">
   <a href="https://github.com/Cobbdevv/luau-grader/actions/workflows/ci.yml"><img src="https://github.com/Cobbdevv/luau-grader/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI"></a>
+  <img src="https://img.shields.io/badge/rules-77-blue" alt="77 Rules">
+  <img src="https://img.shields.io/badge/tests-136-brightgreen" alt="136 Tests">
   <img src="https://img.shields.io/badge/language-Rust-orange" alt="Rust">
-  <img src="https://img.shields.io/badge/platform-Windows-blue" alt="Windows">
   <img src="https://img.shields.io/github/license/Cobbdevv/luau-grader" alt="License">
 </p>
 
-Luau Auto-Grader is a fast desktop app and CLI that helps you grade your Luau code against professional Roblox development standards. It's built with Rust and Tauri to be lightning fast.
+Luau Grader is a professional-grade static analysis and grading engine for Luau code. It uses AST parsing to thoroughly analyze your code against 77 rules across 5 tiers, then scores it across 7 dimensions to produce a letter grade, technical debt estimate, and prioritized improvement path.
 
-Under the hood, our grading engine uses AST parsing to thoroughly analyze your Luau code without relying on fragile regex. It checks your code against a carefully curated set of rules based on actual production-grade Roblox development practices. We've organized these rules into four tiers (from Beginner to Front Page) and seven categories to give you clear, actionable feedback on how to improve your code quality.
+Built with Rust and Tauri. Ships as both a CLI tool and a desktop application.
 
 ---
 
 ## Features
 
-- **AST-based analysis**: Uses full_moon to parse your Luau code into a real syntax tree. No messy regex hacks here!
-- **Tier system**: We have four tiers starting from Beginner up to Front Page. As you move up a tier, it automatically includes all the rules from the ones below it.
-- **Auto-fix support**: We've got 9 rules that support automatic fixes. You can easily apply them with a single click in the GUI or by running `luau-grader fix` in the CLI.
-- **CLI mode**: Perfect for your command line workflow! Grade files, fix code, and scan whole directories easily. It even outputs CI-friendly exit codes.
-- **Multi-file analysis**: Want to grade a whole project? You can analyze entire directories of `.luau` or `.lua` files and get a nice aggregate report.
-- **Custom rules**: Need something specific? You can define your very own rules using `.luaugraderrc` with simple pattern matching for function and method calls.
-- **Highly configurable**: You can tweak rule parameters, override severity levels, or disable rules completely using a `.luaugraderrc` JSON file.
-- **Letter grading**: We score your code from A+ down to F, with specific point deductions for each issue found.
-- **Syntax highlighting**: Your code looks great in our editor thanks to a built-in Luau tokenizer that colors keywords, strings, numbers, comments, and built-ins.
-- **Diagnostic line markers**: Any issues we find are highlighted right on the lines in the editor.
-- **Click-to-jump**: Just click on any diagnostic card and we'll automatically scroll you right to the line with the issue.
-- **Settings sidebar**: Easily toggle individual rules on or off, neatly grouped by category.
-
----
-
-## Rules
-
-### Beginner (5 rules)
-
-| ID | Category | Description | Auto-fix |
-|:---|:---|:---|:---:|
-| B001 | Performance | Deprecated `wait()` usage | ✓ |
-| B002 | Performance | Deprecated `spawn()` usage | ✓ |
-| B003 | Performance | Deprecated `delay()` usage | ✓ |
-| B004 | Networking | `InvokeClient` deadlock risk | |
-| B005 | Common Bugs | `WaitForChild()` without timeout | ✓ |
-
-### Intermediate (3 rules)
-
-| ID | Category | Description | Auto-fix |
-|:---|:---|:---|:---:|
-| I001 | Code Style | Function exceeds line limit (configurable) | |
-| I002 | Code Style | Single-letter variable names (configurable exceptions) | |
-| I003 | Performance | `GetService()` inside loops | ✓ |
-
-### Advanced (4 rules)
-
-| ID | Category | Description | Auto-fix |
-|:---|:---|:---|:---:|
-| A001 | Performance | `Instance.new()` inside loops | |
-| A002 | Memory Management | Connection not stored for cleanup | ✓ |
-| A003 | Performance | String concatenation in loops | |
-| A004 | Data Persistence | `SetAsync` instead of `UpdateAsync` | ✓ |
-
-### Front Page (3 rules)
-
-| ID | Category | Description | Auto-fix |
-|:---|:---|:---|:---:|
-| F001 | Code Style | Missing `--!strict` directive | ✓ |
-| F002 | Memory Management | `Parent = nil` without `:Destroy()` | ✓ |
-| F003 | Module Architecture | `require()` inside loops | |
+- **77 rules** across Beginner, Intermediate, Advanced, Front Page, and Security tiers
+- **7-dimensional grading** evaluating Structure, API Correctness, Error Handling, Performance, Readability, Safety, and Security
+- **Per-function grades** with cyclomatic and cognitive complexity analysis
+- **Technical debt estimation** in minutes with category breakdown
+- **Improvement projection** showing exactly what to fix to raise your grade
+- **Script type detection** identifying ServerScript, ClientScript, ModuleScript, SharedModule, and Plugin
+- **Pattern recognition** detecting debounce, cooldown, data persistence, cleanup, observer, and module patterns
+- **11 auto-fixable rules** applied with a single command or button click
+- **Custom rules** defined via `.luaugraderrc` with function and method call pattern matching
+- **AST-based analysis** using full_moon for accurate Luau parsing
 
 ---
 
 ## CLI Usage
 
 ```bash
-# Grade a single file
-luau-grader check script.luau --tier front_page
+luau-grader grade script.luau
+luau-grader grade script.luau --format json
 
-# Grade a directory recursively
-luau-grader check-dir src/ --recursive --tier advanced
+luau-grader check script.luau --tier advanced
+luau-grader check-dir src/ --recursive --tier front_page
 
-# Auto-fix a file (preview first with --dry-run)
 luau-grader fix script.luau --dry-run
 luau-grader fix script.luau
 
-# JSON output for CI pipelines
-luau-grader check script.luau --format json
-
-# List all available rules
 luau-grader list-rules
 ```
 
 Exit codes: `0` = clean, `1` = warnings only, `2` = errors found.
+
+### Grade Report
+
+```
+  script.luau - ServerScript
+
+  Grade: B+ (82/100)
+
+  Dimensions
+    Structure            ████████░░  78
+    API Correctness      ██████████  95
+    Error Handling       ██████░░░░  60
+    Performance          █████████░  88
+    Readability          ████████░░  75
+    Safety               █████████░  90
+    Security             ██████████ 100
+
+  Per-Function Grades
+    onPlayerAdded (line 12) B   complexity:8  lines:34
+    saveData (line 48)      A-  complexity:4  lines:18
+
+  Technical Debt: 45 minutes
+    Error Handling     25 min  (3 issues)
+    Performance        15 min  (2 issues)
+
+  Improvement Path B+ -> A-
+    1. Add pcall around DataStore calls  +8 pts ~15 min
+    2. Cache FindFirstChild results      +4 pts ~5 min
+
+  Strengths
+    + Uses --!strict mode
+    + Clean parameter signatures
+```
+
+---
+
+## Rules
+
+### Beginner (12 rules)
+
+| ID | Category | Description | Fix |
+|:---|:---|:---|:---:|
+| B001 | Performance | Deprecated `wait()` usage | Y |
+| B002 | Performance | Deprecated `spawn()` usage | Y |
+| B003 | Performance | Deprecated `delay()` usage | Y |
+| B004 | Networking | `InvokeClient` deadlock risk | |
+| B005 | Common Bugs | `WaitForChild()` without timeout | Y |
+| B006 | Common Bugs | `Instance.new()` with parent argument | |
+| B007 | API Deprecation | Deprecated lowercase method aliases | Y |
+| B008 | API Deprecation | Deprecated `table.foreach/foreachi/getn` | |
+| B009 | Code Style | `game.Workspace` instead of `workspace` | Y |
+| B010 | Common Bugs | Constructor argument count validation | |
+| B011 | Common Bugs | Method argument count validation | |
+| B012 | Common Bugs | Standard library argument count validation | |
+
+### Intermediate (22 rules)
+
+| ID | Category | Description | Fix |
+|:---|:---|:---|:---:|
+| I001 | Code Style | Function exceeds line limit | |
+| I002 | Code Style | Single-letter variable names | |
+| I003 | Performance | `GetService()` inside loops | Y |
+| I004 | Common Bugs | Numeric for loop wrong step direction | |
+| I005 | Code Quality | Empty if block | |
+| I006 | Code Quality | Redundant `tostring` on string | |
+| I007 | Code Quality | Redundant `tonumber` on number | |
+| I008 | Code Style | Deep nesting exceeds threshold | |
+| I009 | Code Hygiene | Debug `print`/`warn` left in code | |
+| I010 | Common Bugs | `table.sort()` result assigned (returns nil) | |
+| I011 | Common Bugs | `type()` vs `typeof()` for Roblox types | |
+| I012 | Common Bugs | `Color3.new()` with values > 1 | |
+| I014 | Code Quality | Self-assignment (`x = x`) | |
+| I016 | Code Quality | Empty function body | |
+| I017 | Code Quality | Duplicate key in table constructor | |
+| I018 | Code Quality | `#` length operator on dictionary table | |
+| I019 | Performance | `while wait() do` anti-pattern | Y |
+| I020 | Code Quality | Explicit nil comparison simplification | |
+| I021 | Code Quality | Negated if condition with else block | |
+| I022 | Code Quality | Comparison with `math.huge` | |
+| I024 | Code Quality | Inconsistent return values across paths | |
+| I025 | Code Quality | Magic numbers without named constants | |
+
+### Advanced (20 rules)
+
+| ID | Category | Description | Fix |
+|:---|:---|:---|:---:|
+| A001 | Performance | `Instance.new()` inside loops | |
+| A002 | Memory Management | Connection not stored for cleanup | |
+| A003 | Performance | String concatenation in loops | |
+| A004 | Data Persistence | `SetAsync` instead of `UpdateAsync` | Y |
+| A005 | Performance | `while true do` without yield | |
+| A006 | Performance | `table.insert` at position 1 in loop | |
+| A007 | Performance | `:Connect()` inside loop | |
+| A008 | Error Handling | `pcall`/`xpcall` result not checked | |
+| A009 | Memory Management | `Clone()` result not stored | |
+| A010 | API Deprecation | Deprecated `LoadAnimation` on Humanoid | |
+| A011 | API Deprecation | Deprecated `SetPrimaryPartCFrame` | |
+| A012 | API Deprecation | Deprecated `GetMouse` | |
+| A013 | Code Quality | Unreachable code after return/break | |
+| A014 | Common Bugs | `table.remove` in forward loop | |
+| A017 | API Deprecation | Deprecated `tick()` | Y |
+| A018 | API Deprecation | Deprecated `TweenPosition`/`TweenSize` | |
+| A019 | Common Bugs | `Debris:AddItem()` with zero/negative lifetime | |
+| A020 | Common Bugs | `string.format` specifier/argument mismatch | |
+| A021 | Performance | `FindFirstChild` inside loop | |
+| A022 | Code Quality | Global writes without `local` keyword | |
+
+### Front Page (15 rules)
+
+| ID | Category | Description | Fix |
+|:---|:---|:---|:---:|
+| F001 | Code Style | Missing `--!strict` directive | Y |
+| F002 | Memory Management | `Parent = nil` without `:Destroy()` | |
+| F003 | Module Architecture | `require()` inside loops | |
+| F004 | Code Style | `GetService("Workspace")` instead of `workspace` | |
+| F005 | Error Handling | `FindFirstChild` result chained without nil check | |
+| F006 | API Deprecation | Deprecated `:Remove()` | |
+| F007 | Common Bugs | `string.sub()` with index 0 | |
+| F008 | Common Bugs | `task.wait()` with negative delay | |
+| F009 | Common Bugs | `Instance.new("")` empty class name | |
+| F010 | Common Bugs | `RenderStepped` on server | |
+| F011 | Code Quality | `task.wait()` return value captured | |
+| F012 | Common Bugs | `:Connect()` with non-function argument | |
+| F015 | Code Hygiene | TODO/FIXME/HACK comments | |
+| F016 | Code Quality | File too large (>500 lines) | |
+| B013 | API Deprecation | `FilteringEnabled` check (always true since 2018) | |
+
+### Security (8 rules)
+
+| ID | Category | Description |
+|:---|:---|:---|
+| S001 | Security | `OnServerEvent` without argument validation |
+| S002 | Security | Remote handler without rate limiting |
+| S003 | Security | `FireServer` sending Position/CFrame data |
+| S004 | Security | `loadstring` usage |
+| S005 | Security | HTTP requests without `pcall` |
+| S006 | Data Persistence | DataStore without session locking |
+| S007 | Security | `game:Destroy()` |
+| S008 | Security | Remote handler without type checking |
 
 ---
 
@@ -128,13 +222,6 @@ Create a `.luaugraderrc` file in your project root. The CLI auto-discovers it by
 }
 ```
 
-### Custom Rule Patterns
-
-| Pattern Type | Matches | Example |
-|:---|:---|:---|
-| `function_call` | Global function calls | `print()`, `warn()`, `error()` |
-| `method_call` | Method calls on any object | `:Clone()`, `:Destroy()`, `:Fire()` |
-
 ---
 
 ## Building from Source
@@ -147,7 +234,7 @@ Create a `.luaugraderrc` file in your project root. The CLI auto-discovers it by
 ### Desktop App
 
 ```bash
-git clone https://github.com/Cobb-Dev/luau-grader.git
+git clone https://github.com/Cobbdevv/luau-grader.git
 cd luau-grader
 cargo install tauri-cli --version "^2"
 cargo tauri build
@@ -156,21 +243,15 @@ cargo tauri build
 ### CLI Only
 
 ```bash
-cargo build --release --package luau-grader-cli
+cargo build --release -p luau-grader-cli
 ```
 
-The binary will be at `target/release/luau-grader-cli.exe`.
-
-### Development
-
-```bash
-cargo tauri dev
-```
+The binary will be at `target/release/luau-grader.exe`.
 
 ### Running Tests
 
 ```bash
-cargo test --workspace
+cargo test -p luau-grader-core
 ```
 
 ---
@@ -179,32 +260,34 @@ cargo test --workspace
 
 ```
 luau-grader/
-  Cargo.toml                # Workspace manifest
-  luau-grader-core/          # Grading engine library
+  Cargo.toml                   Workspace manifest
+  luau-grader-core/            Grading engine library
     src/
-      analyzer/              # AST walker and analysis context
-      rulesets/               # Rule implementations by tier
-      config.rs              # Tier enum
-      report.rs              # Diagnostic and Report types
-      errors.rs              # Error types
-      fixer.rs               # Auto-fix engine
-      batch.rs               # Multi-file analysis
-      ruleset_config.rs      # .luaugraderrc config parsing
-      lib.rs                 # Library root
+      analyzer/                AST walker and analysis context
+      rulesets/                Rule implementations by tier
+        beginner.rs            12 rules
+        intermediate.rs        22 rules
+        advanced.rs            20 rules
+        front_page.rs          15 rules
+        security.rs            8 rules
+        mod.rs                 Rule registration and tier mapping
+      config.rs                Tier enum
+      report.rs                Diagnostic and Report types
+      errors.rs                Error types
+      fixer.rs                 Auto-fix engine
+      batch.rs                 Multi-file analysis
+      metrics.rs               AST-based complexity and pattern analysis
+      scorer.rs                7-dimensional weighted scoring engine
+      grade.rs                 Grade report structures and thresholds
+      ruleset_config.rs        .luaugraderrc config parsing
+      lib.rs                   Library root
     tests/
-      rules.rs               # Integration tests (39 tests)
-  luau-grader-cli/           # Standalone CLI binary
+      rules.rs                 136 integration tests
+  luau-grader-cli/             Standalone CLI binary
     src/
-      main.rs                # check, check-dir, fix, list-rules
-  src-tauri/                 # Tauri desktop application
-    src/
-      lib.rs                 # Tauri commands
-      main.rs                # Desktop entry point
-    tauri.conf.json
-  src/                       # Frontend (HTML/CSS/JS)
-    index.html
-    styles.css
-    main.js
+      main.rs                  check, check-dir, fix, grade, list-rules
+  src-tauri/                   Tauri desktop application
+  src/                         Frontend (HTML/CSS/JS)
 ```
 
 ---
