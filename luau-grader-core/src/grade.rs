@@ -81,16 +81,16 @@ pub struct GradeReport {
 
 pub fn score_to_grade(score: f64) -> String {
     match score as u8 {
-        95..=100 => "A+".to_string(),
-        90..=94 => "A".to_string(),
-        85..=89 => "A-".to_string(),
-        80..=84 => "B+".to_string(),
-        75..=79 => "B".to_string(),
-        70..=74 => "B-".to_string(),
-        65..=69 => "C+".to_string(),
-        60..=64 => "C".to_string(),
-        55..=59 => "C-".to_string(),
-        50..=54 => "D".to_string(),
+        97..=100 => "A+".to_string(),
+        93..=96 => "A".to_string(),
+        89..=92 => "A-".to_string(),
+        84..=88 => "B+".to_string(),
+        78..=83 => "B".to_string(),
+        72..=77 => "B-".to_string(),
+        65..=71 => "C+".to_string(),
+        58..=64 => "C".to_string(),
+        50..=57 => "C-".to_string(),
+        40..=49 => "D".to_string(),
         _ => "F".to_string(),
     }
 }

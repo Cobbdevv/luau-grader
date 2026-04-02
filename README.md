@@ -296,6 +296,10 @@ luau-grader/
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for a guide on implementing new rules using the `Rule` trait.
 
+## Privacy & Security
+
+Luau Grader runs **100% locally**. It makes **zero network requests**, collects **no telemetry**, and has **no analytics**. Your code never leaves your machine. The entire source code is open and auditable right here.
+
 ---
 
 ## License

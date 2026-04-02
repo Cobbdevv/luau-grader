@@ -544,7 +544,7 @@ impl MetricsCollector {
             for j in (i + 1)..self.functions.len() {
                 let a = &self.functions[i];
                 let b = &self.functions[j];
-                if a.line_count < 5 || b.line_count < 5 {
+                if a.line_count < 8 || b.line_count < 8 {
                     continue;
                 }
                 let a_start = a.line.saturating_sub(1);
@@ -553,22 +553,42 @@ impl MetricsCollector {
                 let b_end = (b_start + b.line_count).min(lines.len());
                 let a_body: Vec<String> = lines[a_start..a_end].iter()
                     .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+                    .filter(|l| !Self::is_boilerplate_line(l))
                     .collect();
                 let b_body: Vec<String> = lines[b_start..b_end].iter()
                     .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+                    .filter(|l| !Self::is_boilerplate_line(l))
                     .collect();
+                if a_body.len() < 4 || b_body.len() < 4 {
+                    continue;
+                }
                 let max_len = a_body.len().max(b_body.len());
                 if max_len == 0 { continue; }
                 let matching = a_body.iter().zip(b_body.iter())
                     .filter(|(al, bl)| al == bl)
                     .count();
                 let similarity = matching as f64 / max_len as f64;
-                if similarity >= 0.70 {
+                if similarity >= 0.85 {
                     pairs.push((a.name.clone(), b.name.clone()));
                 }
             }
         }
         pairs
+    }
+
+    fn is_boilerplate_line(line: &str) -> bool {
+        let trimmed = line.trim();
+        trimmed.is_empty()
+            || trimmed == "end"
+            || trimmed == "end)"
+            || trimmed == "end,"
+            || trimmed == "return"
+            || trimmed.starts_with("local function ")
+            || trimmed.starts_with("function ")
+            || trimmed.starts_with("--")
+            || (trimmed.starts_with("local ") && trimmed.contains("GetService("))
+            || (trimmed.starts_with("local ") && trimmed.contains("require("))
+            || (trimmed.starts_with("return ") && trimmed.len() < 30)
     }
 
     fn compute_organization_score(source: &str) -> f64 {
