@@ -2,6 +2,7 @@ pub mod beginner;
 pub mod intermediate;
 pub mod advanced;
 pub mod front_page;
+pub mod security;
 
 use crate::analyzer::context::AnalysisContext;
 use crate::config::Tier;
@@ -46,6 +47,8 @@ pub fn all_rules_with_config(config: &RulesetConfig) -> Vec<Box<dyn Rule>> {
     let var_exceptions: Vec<String> = config.get_param("I002", "exceptions")
         .unwrap_or_else(|| vec!["i".into(), "j".into(), "k".into(), "_".into()]);
     let wfc_timeout: u64 = config.get_param("B005", "default_timeout").unwrap_or(5);
+    let max_nesting: usize = config.get_param("I008", "max_nesting").unwrap_or(5);
+    let max_file_lines: usize = config.get_param("F016", "max_lines").unwrap_or(500);
 
     let mut rules: Vec<Box<dyn Rule>> = vec![
         Box::new(beginner::DeprecatedWaitRule),
@@ -53,16 +56,96 @@ pub fn all_rules_with_config(config: &RulesetConfig) -> Vec<Box<dyn Rule>> {
         Box::new(beginner::DeprecatedDelayRule),
         Box::new(beginner::InvokeClientRule),
         Box::new(beginner::WaitForChildTimeoutRule::new(wfc_timeout)),
+        Box::new(beginner::InstanceNewParentArgRule),
+        Box::new(beginner::DeprecatedLowercaseMethodRule),
+        Box::new(beginner::DeprecatedTableFunctionRule),
+        Box::new(beginner::GameDotWorkspaceRule),
+        Box::new(beginner::ConstructorArgCountRule),
+        Box::new(beginner::MethodArgCountRule),
+        Box::new(beginner::StdLibArgCountRule),
+
         Box::new(intermediate::FunctionTooLongRule::new(max_lines)),
         Box::new(intermediate::SingleLetterVariableRule::new(var_exceptions)),
         Box::new(intermediate::GetServiceInLoopRule),
+        Box::new(intermediate::NumericForWrongStepRule),
+        Box::new(intermediate::EmptyIfBodyRule),
+        Box::new(intermediate::RedundantTostringRule),
+        Box::new(intermediate::RedundantTonumberRule),
+        Box::new(intermediate::DeepNestingRule::new(max_nesting)),
+        Box::new(intermediate::DebugPrintWarnRule),
+        Box::new(intermediate::TableSortResultRule),
+        Box::new(intermediate::TypeVsTypeofRule),
+        Box::new(intermediate::Color3NewLargeValuesRule),
+        Box::new(intermediate::SelfAssignmentRule),
+        Box::new(intermediate::EmptyFunctionBodyRule),
+        Box::new(intermediate::DuplicateTableKeyRule),
+        Box::new(intermediate::HashLengthOnDictRule),
+        Box::new(intermediate::WhileWaitDoRule),
+        Box::new(intermediate::NilComparisonRule),
+        Box::new(intermediate::NegatedConditionRule),
+        Box::new(intermediate::MathHugeComparisonRule),
+        Box::new(intermediate::InconsistentReturnRule),
+        Box::new(intermediate::VariableShadowingRule),
+        Box::new(intermediate::UnusedLocalRule),
+        Box::new(intermediate::RepeatedAccessChainRule),
+        Box::new(intermediate::VagueVariableNameRule),
+        Box::new(intermediate::RedundantBooleanComparisonRule),
+        Box::new(intermediate::TaskSpawnClosureWrappingRule),
+        Box::new(intermediate::DuplicateGetServiceRule),
+
         Box::new(advanced::InstanceNewInLoopRule),
         Box::new(advanced::ConnectWithoutStoreRule),
         Box::new(advanced::StringConcatInLoopRule),
         Box::new(advanced::SetAsyncRule),
+        Box::new(advanced::WhileTrueNoYieldRule),
+        Box::new(advanced::TableInsertFrontInLoopRule),
+        Box::new(advanced::ConnectInLoopRule),
+        Box::new(advanced::PcallNoCheckRule),
+        Box::new(advanced::CloneNotStoredRule),
+        Box::new(advanced::DeprecatedLoadAnimationRule),
+        Box::new(advanced::DeprecatedSetPrimaryPartCFrameRule),
+        Box::new(advanced::DeprecatedMouseApiRule),
+        Box::new(advanced::UnreachableCodeRule),
+        Box::new(advanced::TableRemoveForwardLoopRule),
+        Box::new(advanced::DeprecatedTickRule),
+        Box::new(advanced::DeprecatedTweenSizeRule),
+        Box::new(advanced::DebrisNegativeTimeRule),
+        Box::new(advanced::StringFormatMismatchRule),
+        Box::new(advanced::FindFirstChildInLoopRule),
+        Box::new(advanced::GlobalWriteRule),
+        Box::new(advanced::DeprecatedBodyMoverRule),
+        Box::new(advanced::DirectHealthSetRule),
+        Box::new(advanced::NestedPcallRule),
+        Box::new(advanced::SetAsyncInPcallRule),
+        Box::new(advanced::PcallErrorSwallowedRule),
+        Box::new(advanced::ConnectWhenOnceSufficesRule),
+
         Box::new(front_page::NoStrictModeRule),
         Box::new(front_page::ParentNilWithoutDestroyRule),
         Box::new(front_page::RequireInLoopRule),
+        Box::new(front_page::GetServiceWorkspaceRule),
+        Box::new(front_page::FindFirstChildChainRule),
+        Box::new(front_page::DeprecatedRemoveRule),
+        Box::new(front_page::StringSubZeroIndexRule),
+        Box::new(front_page::TaskWaitNegativeRule),
+        Box::new(front_page::InstanceNewEmptyStringRule),
+        Box::new(front_page::RenderSteppedOnServerRule),
+        Box::new(front_page::WaitReturnValueRule),
+        Box::new(front_page::ConnectWithNonFunctionRule),
+        Box::new(front_page::TodoCommentRule),
+        Box::new(front_page::LargeFileRule::new(max_file_lines)),
+        Box::new(front_page::DeprecatedFilteringEnabledRule),
+        Box::new(front_page::MissingTypeAnnotationRule),
+        Box::new(front_page::HardcodedInstancePathRule),
+
+        Box::new(security::UnvalidatedRemoteArgsRule),
+        Box::new(security::NoRateLimitRule),
+        Box::new(security::TrustClientPositionRule),
+        Box::new(security::LoadstringUsageRule),
+        Box::new(security::HttpNoPcallRule),
+        Box::new(security::NoSessionLockRule),
+        Box::new(security::GameDestroyRule),
+        Box::new(security::NoSanityCheckRule),
     ];
 
     for custom in &config.custom_rules {
