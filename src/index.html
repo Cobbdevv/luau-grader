@@ -3,19 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Luau Auto-Grader</title>
+    <title>Luau Grader</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <header id="top-bar">
         <div id="logo">
-            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                <path d="M4 4V24H20" stroke="#89b4fa" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-                <circle cx="10" cy="10" r="2" fill="#89b4fa"/>
-                <circle cx="16" cy="16" r="2" fill="#89b4fa"/>
-                <circle cx="22" cy="8" r="2" fill="#89b4fa"/>
-            </svg>
+            <img src="logo.png" alt="Luau Grader Logo" width="28" height="28" style="object-fit: contain;">
             <span>LUAU GRADER</span>
         </div>
         <div id="tier-selector">
@@ -27,6 +22,11 @@
         <div id="top-actions">
             <button id="grade-btn"><span id="grade-text">GRADE</span><div id="grade-spinner" class="spinner hidden"></div></button>
             <button id="fix-btn" class="hidden" title="Apply all auto-fixes"><span id="fix-text">FIX ALL</span><span id="fix-count" class="fix-count-badge hidden">0</span></button>
+            <button id="export-btn" class="hidden" title="Export Report">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+                </svg>
+            </button>
             <button id="settings-btn" title="Rule Settings">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                     <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
@@ -41,6 +41,7 @@
                 <div id="code-tabs">
                     <button class="tab active" data-tab="paste">Paste Code</button>
                     <button class="tab" data-tab="upload">Upload File</button>
+                    <button class="tab" data-tab="workspace" id="workspace-tab-btn">Workspace</button>
                     <span id="file-name-display"></span>
                 </div>
                 <div id="paste-panel" class="tab-panel active">
@@ -64,6 +65,28 @@
                         <input type="file" id="file-input" accept=".luau,.lua" hidden>
                     </div>
                 </div>
+                <div id="workspace-panel" class="tab-panel">
+                    <div id="workspace-content">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#6c7086" stroke-width="2" style="margin-bottom: 12px;">
+                           <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line>
+                        </svg>
+                        <p class="drop-primary">Select your project directory</p>
+                        <p class="drop-secondary">Finds dead code & cyclic dependencies across all files.</p>
+                        <button id="browse-workspace-btn">Open Directory</button>
+                    </div>
+                    <div id="workspace-diagnostics-container" class="hidden">
+                        <div id="ws-diag-header">
+                            <div class="ws-header-left">
+                                <div id="ws-issue-indicator"></div>
+                                <span id="ws-issue-count">Working...</span>
+                            </div>
+                            <button id="repick-workspace-btn">Change Directory</button>
+                        </div>
+                        <div id="ws-diag-body">
+                            <div id="workspace-diagnostics-list"></div>
+                        </div>
+                    </div>
+                </div>
             </section>
 
             <div id="resize-handle"></div>
@@ -76,6 +99,60 @@
                     </div>
                     <div id="grade-badge" class="hidden">A+</div>
                 </div>
+
+                <div id="grade-dashboard" class="hidden">
+                    <div id="dashboard-top">
+                        <div id="score-ring-container">
+                            <svg id="score-ring" viewBox="0 0 120 120">
+                                <circle cx="60" cy="60" r="52" fill="none" stroke="#313244" stroke-width="8"/>
+                                <circle id="score-ring-fill" cx="60" cy="60" r="52" fill="none" stroke="#89b4fa" stroke-width="8"
+                                    stroke-linecap="round" stroke-dasharray="326.73" stroke-dashoffset="326.73"
+                                    transform="rotate(-90 60 60)"/>
+                            </svg>
+                            <div id="score-ring-label">
+                                <span id="score-ring-grade">--</span>
+                                <span id="score-ring-score">0</span>
+                            </div>
+                        </div>
+                        <div id="dimension-bars"></div>
+                        <div id="radar-chart-container" class="hidden">
+                            <svg id="radar-chart" viewBox="0 0 300 300"></svg>
+                        </div>
+                    </div>
+                    <div id="chart-toggle-row">
+                        <button id="chart-toggle-btn">Show Chart</button>
+                    </div>
+
+                    <div id="dashboard-sections">
+                        <div id="function-grades-section" class="dashboard-section hidden">
+                            <h3 class="section-title">Per-Function Grades</h3>
+                            <div id="function-grades-list"></div>
+                        </div>
+
+                        <div id="debt-section" class="dashboard-section hidden">
+                            <h3 class="section-title">Technical Debt</h3>
+                            <div id="debt-total"></div>
+                            <div id="debt-breakdown"></div>
+                        </div>
+
+                        <div id="improvement-section" class="dashboard-section hidden">
+                            <h3 class="section-title">Improvement Path</h3>
+                            <div id="improvement-header"></div>
+                            <div id="improvement-steps"></div>
+                        </div>
+
+                        <div id="strengths-section" class="dashboard-section hidden">
+                            <h3 class="section-title">Strengths</h3>
+                            <div id="strengths-list"></div>
+                        </div>
+
+                        <div id="patterns-section" class="dashboard-section hidden">
+                            <h3 class="section-title">Detected Patterns</h3>
+                            <div id="patterns-list"></div>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="diagnostics-list">
                     <div id="empty-state"><p>Grade your code to see diagnostics here</p></div>
                 </div>
@@ -90,11 +167,61 @@
             <div id="settings-remember">
                 <label><input type="checkbox" id="remember-toggle"> Remember settings</label>
             </div>
+            <div id="settings-background">
+                <h4 class="settings-section-title">Background Image</h4>
+                <div id="bg-preview-container">
+                    <div id="bg-preview"></div>
+                    <div id="bg-no-image">No image set</div>
+                </div>
+                <div id="bg-actions">
+                    <button id="bg-upload-btn">Upload Image</button>
+                    <button id="bg-clear-btn" class="hidden">Clear</button>
+                </div>
+                <input type="file" id="bg-file-input" accept="image/*" hidden>
+                <div id="bg-opacity-control">
+                    <label for="bg-opacity-slider">Panel Opacity</label>
+                    <input type="range" id="bg-opacity-slider" min="50" max="100" value="90" step="1">
+                    <span id="bg-opacity-value">90%</span>
+                </div>
+            </div>
+            <div id="settings-theme">
+                <h4 class="settings-section-title">App Theme</h4>
+                <div id="theme-gallery"></div>
+                <div id="theme-footer">
+                    <button id="theme-open-folder-btn">Open Themes Folder</button>
+                    <button id="theme-upload-btn">Import JSON</button>
+                    <button id="theme-reset-btn" class="hidden">Reset to Default</button>
+                </div>
+                <input type="file" id="theme-file-input" accept=".json" hidden>
+            </div>
             <div id="settings-rules"></div>
         </aside>
     </div>
 
     <div id="toast" class="toast hidden"></div>
+
+    <div id="diff-overlay" class="diff-overlay hidden">
+        <div id="diff-modal">
+            <div id="diff-header">
+                <span class="diff-title">Review Changes</span>
+                <div id="diff-stats"></div>
+            </div>
+            <div id="diff-body">
+                <div id="diff-pane-before" class="diff-pane">
+                    <div class="diff-pane-header">Before</div>
+                    <pre id="diff-content-before"></pre>
+                </div>
+                <div id="diff-pane-after" class="diff-pane">
+                    <div class="diff-pane-header">After</div>
+                    <pre id="diff-content-after"></pre>
+                </div>
+            </div>
+            <div id="diff-footer">
+                <button id="diff-cancel-btn">Cancel</button>
+                <button id="diff-apply-btn">Apply Changes</button>
+            </div>
+        </div>
+    </div>
 
     <script src="main.js"></script>
 </body>

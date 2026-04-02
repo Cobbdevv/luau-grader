@@ -1,0 +1,27 @@
+{
+  "name": "Monochrome",
+  "logo": "theme_mono.png",
+  "colors": {
+    "bg-base": "#0a0a0a",
+    "bg-surface": "#0f0f0f",
+    "bg-deeper": "#050505",
+    "bg-overlay": "#1a1a1a",
+    "border": "#222222",
+    "text": "#e8e8e8",
+    "text-dim": "#707070",
+    "text-muted": "#404040",
+    "accent": "#ffffff",
+    "accent-hover": "#d0d0d0",
+    "error": "#e0e0e0",
+    "warning": "#b0b0b0",
+    "info": "#ffffff",
+    "success": "#c0c0c0",
+    "hl-keyword": "#ffffff",
+    "hl-string": "#a0a0a0",
+    "hl-number": "#c8c8c8",
+    "hl-comment": "#404040",
+    "hl-literal": "#b8b8b8",
+    "hl-builtin": "#e0e0e0",
+    "hl-method": "#d0d0d0"
+  }
+}
