@@ -8,14 +8,24 @@ pub fn calculate_grade(
     file: &str,
     tier: &str,
 ) -> GradeReport {
+    calculate_grade_with_source(diagnostics, metrics, file, tier, "")
+}
+
+pub fn calculate_grade_with_source(
+    diagnostics: &[Diagnostic],
+    metrics: &FileMetrics,
+    file: &str,
+    tier: &str,
+    source: &str,
+) -> GradeReport {
     let weights = get_weights(metrics.script_type);
     let structure = score_structure(diagnostics, metrics);
-    let api = score_api_correctness(diagnostics);
+    let api = score_api_correctness(diagnostics, metrics);
     let error_handling = score_error_handling(diagnostics, metrics);
-    let performance = score_performance(diagnostics);
+    let performance = score_performance(diagnostics, metrics);
     let readability = score_readability(diagnostics, metrics);
     let safety = score_safety(diagnostics, metrics);
-    let security = score_security(diagnostics, metrics);
+    let security = score_security(diagnostics, metrics, source);
 
     let dimensions = vec![
         structure, api, error_handling, performance, readability, safety, security,
@@ -184,19 +194,9 @@ fn score_structure(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Dimensi
         deductions.push("Code structure is disorganized (services, functions, and connections mixed together)".to_string());
     }
 
-    if metrics.functions.iter().all(|f| f.line_count < 30) && metrics.function_count > 0 {
-        score += 3;
-        bonuses.push("All functions under 30 lines".to_string());
-    }
-
     if metrics.functions.iter().all(|f| f.cyclomatic_complexity < 5) && metrics.function_count > 0 {
-        score += 3;
+        score += 2;
         bonuses.push("Low complexity across all functions".to_string());
-    }
-
-    if metrics.functions.iter().all(|f| f.param_count <= 3) && metrics.function_count > 0 {
-        score += 3;
-        bonuses.push("Clean parameter signatures".to_string());
     }
 
     DimensionScore {
@@ -208,10 +208,9 @@ fn score_structure(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Dimensi
     }
 }
 
-fn score_api_correctness(diagnostics: &[Diagnostic]) -> DimensionScore {
-    let mut score: i32 = 100;
+fn score_api_correctness(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> DimensionScore {
     let mut deductions = Vec::new();
-    let bonuses = Vec::new();
+    let mut bonuses = Vec::new();
 
     let mut deprecated_count = 0;
     let mut arg_count_errors = 0;
@@ -219,6 +218,26 @@ fn score_api_correctness(diagnostics: &[Diagnostic]) -> DimensionScore {
     for diag in diagnostics {
         if diag.category == "API Deprecation" {
             deprecated_count += 1;
+        }
+        if diag.category == "Common Bugs" && diag.message.contains("expects") && diag.message.contains("argument") {
+            arg_count_errors += 1;
+        }
+    }
+
+    let has_api_signals = metrics.service_count > 0 || deprecated_count > 0 || arg_count_errors > 0;
+
+    let mut score: i32 = if !has_api_signals {
+        80
+    } else {
+        let mut s: i32 = 85;
+        if deprecated_count == 0 { s += 5; bonuses.push("No deprecated API calls".to_string()); }
+        if arg_count_errors == 0 { s += 5; bonuses.push("Correct argument counts".to_string()); }
+        if metrics.consistency_score >= 0.95 { s += 5; bonuses.push("Consistent modern API style".to_string()); }
+        s
+    };
+
+    for diag in diagnostics {
+        if diag.category == "API Deprecation" {
             match diag.severity {
                 crate::report::Severity::Error => score -= 10,
                 crate::report::Severity::Warning => score -= 5,
@@ -226,7 +245,6 @@ fn score_api_correctness(diagnostics: &[Diagnostic]) -> DimensionScore {
             }
         }
         if diag.category == "Common Bugs" && diag.message.contains("expects") && diag.message.contains("argument") {
-            arg_count_errors += 1;
             score -= 10;
         }
     }
@@ -311,11 +329,6 @@ fn score_error_handling(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Di
         }
     }
 
-    if ffc_chain_count == 0 {
-        score += 3;
-        bonuses.push("All FindFirstChild results properly checked".to_string());
-    }
-
     DimensionScore {
         name: "Error Handling".to_string(),
         score: score.clamp(0, 100) as u8,
@@ -325,22 +338,30 @@ fn score_error_handling(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Di
     }
 }
 
-fn score_performance(diagnostics: &[Diagnostic]) -> DimensionScore {
-    let mut score: i32 = 100;
+fn score_performance(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> DimensionScore {
     let mut deductions = Vec::new();
     let bonuses = Vec::new();
 
     let mut perf_issues = 0;
+    let mut perf_penalty: i32 = 0;
     for diag in diagnostics {
         if diag.category == "Performance" {
             perf_issues += 1;
             match diag.severity {
-                crate::report::Severity::Error => score -= 15,
-                crate::report::Severity::Warning => score -= 8,
-                crate::report::Severity::Info => score -= 3,
+                crate::report::Severity::Error => perf_penalty += 15,
+                crate::report::Severity::Warning => perf_penalty += 8,
+                crate::report::Severity::Info => perf_penalty += 3,
             }
         }
     }
+
+    let score: i32 = if perf_issues == 0 && metrics.total_lines < 30 {
+        80
+    } else if perf_issues == 0 {
+        92
+    } else {
+        100 - perf_penalty
+    };
 
     if perf_issues > 0 {
         deductions.push(format!("{} performance issues", perf_issues));
@@ -368,16 +389,6 @@ fn score_readability(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Dimen
         let penalty = (single_letter_count as i32 * 3).min(40);
         score -= penalty;
         deductions.push(format!("{} single-letter variable names", single_letter_count));
-    }
-
-    let magic_number_count = diagnostics.iter()
-        .filter(|d| d.rule_id == "I025")
-        .count();
-
-    if magic_number_count > 0 {
-        let penalty = (magic_number_count as i32 * 2).min(30);
-        score -= penalty;
-        deductions.push(format!("{} magic numbers without named constants", magic_number_count));
     }
 
     let print_warn_count = diagnostics.iter()
@@ -514,6 +525,19 @@ fn score_readability(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Dimen
         bonuses.push("Good comment-to-code ratio".to_string());
     }
 
+    if metrics.total_lines > 30 && metrics.function_count > 0 {
+        if metrics.type_annotation_ratio < 0.1 {
+            score -= 15;
+            deductions.push("Almost no type annotations in a substantial file".to_string());
+        } else if metrics.type_annotation_ratio < 0.3 {
+            score -= 8;
+            deductions.push("Low type annotation coverage".to_string());
+        } else if metrics.type_annotation_ratio >= 0.7 {
+            score += 5;
+            bonuses.push("Strong type annotation coverage".to_string());
+        }
+    }
+
     DimensionScore {
         name: "Readability".to_string(),
         score: score.clamp(0, 100) as u8,
@@ -569,6 +593,14 @@ fn score_safety(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> DimensionS
         deductions.push("No --!strict mode in a substantial file".to_string());
     }
 
+    if metrics.has_strict_mode && metrics.type_annotation_ratio >= 0.5 {
+        score += 5;
+        bonuses.push("Strict mode with substantial type coverage".to_string());
+    } else if metrics.has_strict_mode && metrics.type_annotation_ratio < 0.2 && metrics.function_count >= 2 {
+        score -= 5;
+        deductions.push("Strict mode enabled but very few type annotations".to_string());
+    }
+
     if !has_unstored_connection && metrics.detected_patterns.contains(&"Observer".to_string()) {
         score += 3;
         bonuses.push("All connections properly managed".to_string());
@@ -588,10 +620,29 @@ fn score_safety(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> DimensionS
     }
 }
 
-fn score_security(diagnostics: &[Diagnostic], _metrics: &FileMetrics) -> DimensionScore {
-    let mut score: i32 = 100;
+fn score_security(diagnostics: &[Diagnostic], metrics: &FileMetrics, source: &str) -> DimensionScore {
     let mut deductions = Vec::new();
     let bonuses = Vec::new();
+
+    let has_security_diagnostics = diagnostics.iter().any(|d| d.rule_id.starts_with('S'));
+    let has_security_surface = has_security_diagnostics
+        || metrics.services_used.contains(&"DataStoreService".to_string())
+        || metrics.services_used.contains(&"HttpService".to_string())
+        || source.contains("OnServerEvent")
+        || source.contains("OnClientEvent")
+        || source.contains("OnInvoke");
+
+    if !has_security_surface {
+        return DimensionScore {
+            name: "Security".to_string(),
+            score: 80,
+            weight: 0.0,
+            deductions,
+            bonuses,
+        };
+    }
+
+    let mut score: i32 = if !has_security_diagnostics { 95 } else { 100 };
 
     for diag in diagnostics {
         if diag.rule_id.starts_with('S') {

@@ -1,3 +1,5 @@
+// AST-matching rules intentionally use separate if-let layers for readability,
+// and explicit range checks for clarity in threshold logic.
 #![allow(
     clippy::collapsible_if,
     clippy::manual_range_contains,
@@ -15,6 +17,7 @@ pub mod report;
 pub mod ruleset_config;
 pub mod rulesets;
 pub mod scorer;
+pub mod suppression;
 pub mod batch;
 pub mod workspace;
 pub mod workspace_rules;

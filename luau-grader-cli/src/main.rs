@@ -330,13 +330,7 @@ fn print_report(report: &luau_grader_core::report::Report) {
     let errors = report.diagnostics.iter().filter(|d| d.severity == Severity::Error).count();
     let warnings = report.diagnostics.iter().filter(|d| d.severity == Severity::Warning).count();
     let score = 100u32.saturating_sub((errors as u32) * 15 + (warnings as u32) * 5);
-    let grade_str = match score {
-        97..=100 => "A+", 93..=96 => "A", 90..=92 => "A-",
-        87..=89 => "B+", 83..=86 => "B", 80..=82 => "B-",
-        77..=79 => "C+", 73..=76 => "C", 70..=72 => "C-",
-        67..=69 => "D+", 63..=66 => "D", 60..=62 => "D-",
-        _ => "F",
-    };
+    let grade_str = luau_grader_core::grade::score_to_grade(score as f64);
     println!("  {} {} ({}/100) - {} errors, {} warnings",
         "Grade:".bold(), grade_str.bold(), score,
         errors.to_string().red(), warnings.to_string().yellow());

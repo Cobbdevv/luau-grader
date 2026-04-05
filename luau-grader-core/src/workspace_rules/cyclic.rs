@@ -74,9 +74,9 @@ impl CyclicDependencyRule {
         let req_lower = req.to_lowercase();
         
         let target_name = if req_lower.contains('.') {
-            req_lower.split('.').last().unwrap_or(&req_lower).trim_matches('"').trim_matches('\'').to_string()
+            req_lower.split('.').next_back().unwrap_or(&req_lower).trim_matches('"').trim_matches('\'').to_string()
         } else if req_lower.contains('/') {
-            req_lower.split('/').last().unwrap_or(&req_lower).trim_matches('"').trim_matches('\'').to_string()
+            req_lower.split('/').next_back().unwrap_or(&req_lower).trim_matches('"').trim_matches('\'').to_string()
         } else {
             req_lower.trim_matches('"').trim_matches('\'').to_string()
         };

@@ -1035,3 +1035,118 @@ fn a027_pcall_error_logged_ok() {
     let ids = grade(source, Tier::Advanced);
     assert!(!ids.contains(&"A027".to_string()));
 }
+
+#[test]
+fn inline_suppression_next_line() {
+    let source = "-- luau-grader: ignore B001\nwait(1)\n";
+    let report = analyzer::analyze(source, Tier::Beginner, "test.luau", &[]).unwrap();
+    assert!(!report.diagnostics.iter().any(|d| d.rule_id == "B001"));
+}
+
+#[test]
+fn inline_suppression_same_line() {
+    let source = "wait(1) -- luau-grader: ignore B001\n";
+    let report = analyzer::analyze(source, Tier::Beginner, "test.luau", &[]).unwrap();
+    assert!(!report.diagnostics.iter().any(|d| d.rule_id == "B001"));
+}
+
+#[test]
+fn suppression_does_not_affect_other_rules() {
+    let source = "-- luau-grader: ignore B001\nwait(1)\nspawn(function() end)\n";
+    let report = analyzer::analyze(source, Tier::Beginner, "test.luau", &[]).unwrap();
+    assert!(!report.diagnostics.iter().any(|d| d.rule_id == "B001"));
+    assert!(report.diagnostics.iter().any(|d| d.rule_id == "B002"));
+}
+
+#[test]
+fn multi_rule_suppression() {
+    let source = "-- luau-grader: ignore B001, B002\nwait(1)\n";
+    let report = analyzer::analyze(source, Tier::Beginner, "test.luau", &[]).unwrap();
+    assert!(!report.diagnostics.iter().any(|d| d.rule_id == "B001"));
+}
+
+#[test]
+fn type_annotation_count_typed_function() {
+    let source = "--!strict\nlocal function add(a: number, b: number): number\n    return a + b\nend\n";
+    let ast = full_moon::parse(source).unwrap();
+    let metrics = luau_grader_core::metrics::collect_metrics(source, &ast);
+    assert!(metrics.type_annotation_count >= 3, "Expected at least 3 type annotations, got {}", metrics.type_annotation_count);
+}
+
+#[test]
+fn type_annotation_count_untyped_function() {
+    let source = "local function add(a, b)\n    return a + b\nend\n";
+    let ast = full_moon::parse(source).unwrap();
+    let metrics = luau_grader_core::metrics::collect_metrics(source, &ast);
+    assert_eq!(metrics.type_annotation_count, 0);
+}
+
+#[test]
+fn type_annotation_ratio_computed() {
+    let source = "--!strict\nlocal function add(a: number, b: number): number\n    return a + b\nend\n";
+    let ast = full_moon::parse(source).unwrap();
+    let metrics = luau_grader_core::metrics::collect_metrics(source, &ast);
+    assert!(metrics.type_annotation_ratio > 0.5, "Expected ratio > 0.5, got {}", metrics.type_annotation_ratio);
+}
+
+#[test]
+fn hollow_performance_small_script() {
+    let config = RulesetConfig::default();
+    let report = analyzer::analyze_graded(
+        "local x = 1\nlocal y = 2\n",
+        Tier::FrontPage, "test.luau", &[], &config,
+    ).unwrap();
+    let perf = report.dimensions.iter().find(|d| d.name == "Performance").unwrap();
+    assert!(perf.score <= 80, "Small script with no perf-relevant code should score <= 80, got {}", perf.score);
+}
+
+#[test]
+fn hollow_security_no_remotes() {
+    let config = RulesetConfig::default();
+    let report = analyzer::analyze_graded(
+        "--!strict\nlocal function foo()\n    return 1\nend\n",
+        Tier::FrontPage, "test.luau", &[], &config,
+    ).unwrap();
+    let security = report.dimensions.iter().find(|d| d.name == "Security").unwrap();
+    assert_eq!(security.score, 80, "Script with no security surface should score 80, got {}", security.score);
+}
+
+#[test]
+fn hollow_api_no_services() {
+    let config = RulesetConfig::default();
+    let report = analyzer::analyze_graded(
+        "--!strict\nlocal x = 1\n",
+        Tier::FrontPage, "test.luau", &[], &config,
+    ).unwrap();
+    let api = report.dimensions.iter().find(|d| d.name == "API Correctness").unwrap();
+    assert_eq!(api.score, 80, "Script with no API usage should score 80, got {}", api.score);
+}
+
+#[test]
+fn typed_file_scores_higher_readability() {
+    let config = RulesetConfig::default();
+
+    let mut typed_lines = vec!["--!strict".to_string()];
+    typed_lines.push("local function add(a: number, b: number): number".to_string());
+    typed_lines.push("    return a + b".to_string());
+    typed_lines.push("end".to_string());
+    for i in 0..30 { typed_lines.push(format!("local var{} = {}", i, i)); }
+    let typed_source = typed_lines.join("\n") + "\n";
+
+    let mut untyped_lines = vec!["--!strict".to_string()];
+    untyped_lines.push("local function add(a, b)".to_string());
+    untyped_lines.push("    return a + b".to_string());
+    untyped_lines.push("end".to_string());
+    for i in 0..30 { untyped_lines.push(format!("local var{} = {}", i, i)); }
+    let untyped_source = untyped_lines.join("\n") + "\n";
+
+    let typed_report = analyzer::analyze_graded(&typed_source, Tier::FrontPage, "test.luau", &[], &config).unwrap();
+    let untyped_report = analyzer::analyze_graded(&untyped_source, Tier::FrontPage, "test.luau", &[], &config).unwrap();
+
+    let typed_readability = typed_report.dimensions.iter().find(|d| d.name == "Readability").unwrap().score;
+    let untyped_readability = untyped_report.dimensions.iter().find(|d| d.name == "Readability").unwrap().score;
+
+    assert!(typed_readability > untyped_readability,
+        "Typed file readability ({}) should score higher than untyped ({})",
+        typed_readability, untyped_readability);
+}

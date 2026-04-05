@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.1.0
+
+### Scoring Engine Recalibration
+- Fixed hollow dimension scoring: API Correctness, Performance, and Security now return neutral 80 instead of perfect 100 when no relevant code exists to evaluate
+- Added type annotation coverage to Readability and Safety scoring dimensions
+- Reduced over-generous baseline bonuses that rewarded expected behavior rather than excellence
+- Removed dead I025 (magic numbers) scorer reference that could never fire
+- Adjusted grade thresholds to account for recalibrated raw scores
+
+### New Features
+- Inline suppression comments: `-- luau-grader: ignore RULE_ID` suppresses diagnostics on the next line
+- Trailing suppression comments: `code() -- luau-grader: ignore RULE_ID` suppresses on the same line
+- Multi-rule suppression: `-- luau-grader: ignore B001, B002`
+- Type annotation counting via full_moon AST (parameters, return types, typed locals)
+- New `type_annotation_ratio` metric tracking annotation coverage percentage
+
+### Bug Fixes
+- `type_annotation_count` metric now actually counts annotations (was always 0)
+
 ## 1.0.0
 
 ### Grading Engine
@@ -48,5 +67,5 @@
 ### Infrastructure
 - Cross-platform CI: Windows and Ubuntu
 - Automated release pipeline with CLI exe, Tauri MSI, and NSIS installer
-- 136 integration tests with zero failures
+- 159 integration tests with zero failures
 - Clippy clean with zero warnings

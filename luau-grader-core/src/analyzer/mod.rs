@@ -9,6 +9,7 @@ use crate::report::Report;
 use crate::ruleset_config::RulesetConfig;
 use crate::rulesets;
 use crate::scorer;
+use crate::suppression::SuppressionMap;
 
 pub fn analyze(source: &str, tier: Tier, file_name: &str, disabled_rules: &[String]) -> Result<Report, GraderError> {
     analyze_with_config(source, tier, file_name, disabled_rules, &RulesetConfig::default())
@@ -43,6 +44,15 @@ pub fn analyze_with_config(
             diag.fixable = rule.is_fixable();
         }
     }
+
+    let suppression_map = SuppressionMap::from_source(source);
+    report.diagnostics.retain(|diag| {
+        if let Some(ref span) = diag.span {
+            !suppression_map.is_suppressed(span.line, &diag.rule_id)
+        } else {
+            true
+        }
+    });
 
     if !config.severity_overrides.is_empty() {
         report.apply_severity_overrides(&config.severity_overrides);
@@ -81,16 +91,26 @@ pub fn analyze_graded(
         }
     }
 
+    let suppression_map = SuppressionMap::from_source(source);
+    report.diagnostics.retain(|diag| {
+        if let Some(ref span) = diag.span {
+            !suppression_map.is_suppressed(span.line, &diag.rule_id)
+        } else {
+            true
+        }
+    });
+
     if !config.severity_overrides.is_empty() {
         report.apply_severity_overrides(&config.severity_overrides);
     }
 
     let file_metrics = metrics::collect_metrics(source, &ast);
-    let grade_report = scorer::calculate_grade(
+    let grade_report = scorer::calculate_grade_with_source(
         &report.diagnostics,
         &file_metrics,
         file_name,
         &tier.to_string(),
+        source,
     );
 
     Ok(grade_report)

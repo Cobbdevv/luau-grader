@@ -197,6 +197,12 @@ pub struct CustomPatternRule {
 }
 
 impl CustomPatternRule {
+    /// Converts a deserialized config into a rule instance.
+    ///
+    /// # Safety note on `Box::leak`
+    /// Strings are intentionally leaked to `'static` because custom rules are
+    /// loaded once at startup from `.luaugraderrc` and must satisfy the `Rule`
+    /// trait's `&'static str` return types. This is a bounded, one-time cost.
     pub fn from_config(config: CustomRuleConfig) -> Self {
         let severity = match config.severity.as_str() {
             "Error" => Severity::Error,

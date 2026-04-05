@@ -81,15 +81,15 @@ pub struct GradeReport {
 
 pub fn score_to_grade(score: f64) -> String {
     match score as u8 {
-        97..=100 => "A+".to_string(),
-        93..=96 => "A".to_string(),
-        89..=92 => "A-".to_string(),
-        84..=88 => "B+".to_string(),
-        78..=83 => "B".to_string(),
-        72..=77 => "B-".to_string(),
-        65..=71 => "C+".to_string(),
-        58..=64 => "C".to_string(),
-        50..=57 => "C-".to_string(),
+        96..=100 => "A+".to_string(),
+        92..=95 => "A".to_string(),
+        88..=91 => "A-".to_string(),
+        83..=87 => "B+".to_string(),
+        77..=82 => "B".to_string(),
+        71..=76 => "B-".to_string(),
+        64..=70 => "C+".to_string(),
+        57..=63 => "C".to_string(),
+        50..=56 => "C-".to_string(),
         40..=49 => "D".to_string(),
         _ => "F".to_string(),
     }
@@ -148,10 +148,6 @@ pub fn grade_function(func: &crate::metrics::FunctionMetrics) -> FunctionGrade {
     if func.has_error_handling {
         score += 5.0;
         strengths.push("Has error handling".to_string());
-    }
-
-    if func.return_count <= 1 {
-        score += 5.0;
     }
 
     score = score.clamp(0.0, 100.0);

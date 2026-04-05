@@ -40,6 +40,7 @@ pub struct FileMetrics {
     pub services_used: Vec<String>,
     pub global_write_count: usize,
     pub type_annotation_count: usize,
+    pub type_annotation_ratio: f64,
     pub comment_line_count: usize,
     pub naming_quality: f64,
     pub has_strict_mode: bool,
@@ -67,6 +68,7 @@ struct MetricsCollector {
     services_used: HashSet<String>,
     global_write_count: usize,
     type_annotation_count: usize,
+    function_param_total: usize,
     all_local_names: Vec<String>,
     deprecated_api_count: usize,
     modern_api_count: usize,
@@ -118,6 +120,7 @@ impl MetricsCollector {
             services_used: HashSet::new(),
             global_write_count: 0,
             type_annotation_count: 0,
+            function_param_total: 0,
             all_local_names: Vec::new(),
             deprecated_api_count: 0,
             modern_api_count: 0,
@@ -187,6 +190,10 @@ impl MetricsCollector {
             services_used: self.services_used.into_iter().collect(),
             global_write_count: self.global_write_count,
             type_annotation_count: self.type_annotation_count,
+            type_annotation_ratio: {
+                let denominator = self.function_param_total + function_count;
+                if denominator == 0 { 0.0 } else { self.type_annotation_count as f64 / denominator as f64 }
+            },
             comment_line_count,
             naming_quality,
             has_strict_mode,
@@ -266,6 +273,16 @@ impl Visitor for MetricsCollector {
         let start_line = body.start_position().map(|p| p.line()).unwrap_or(0);
         let end_line = body.end_position().map(|p| p.line()).unwrap_or(0);
         let param_count = body.parameters().into_iter().count();
+
+        self.function_param_total += param_count;
+        for spec in body.type_specifiers() {
+            if spec.is_some() {
+                self.type_annotation_count += 1;
+            }
+        }
+        if body.return_type().is_some() {
+            self.type_annotation_count += 1;
+        }
 
         let name = if let Some(pending) = self.pending_function_name.take() {
             pending
@@ -371,6 +388,11 @@ impl Visitor for MetricsCollector {
     fn visit_local_assignment(&mut self, node: &ast::LocalAssignment) {
         if let Some(ref mut func) = self.current_function {
             func.local_count += 1;
+        }
+        for spec in node.type_specifiers() {
+            if spec.is_some() {
+                self.type_annotation_count += 1;
+            }
         }
         for name in node.names() {
             let var_name = name.token().to_string();

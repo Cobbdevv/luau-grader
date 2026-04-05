@@ -6,13 +6,13 @@
 
 <p align="center">
   <a href="https://github.com/Cobbdevv/luau-grader/actions/workflows/ci.yml"><img src="https://github.com/Cobbdevv/luau-grader/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI"></a>
-  <img src="https://img.shields.io/badge/rules-77-blue" alt="77 Rules">
-  <img src="https://img.shields.io/badge/tests-136-brightgreen" alt="136 Tests">
+  <img src="https://img.shields.io/badge/rules-91-blue" alt="91 Rules">
+  <img src="https://img.shields.io/badge/tests-159-brightgreen" alt="159 Tests">
   <img src="https://img.shields.io/badge/language-Rust-orange" alt="Rust">
   <img src="https://img.shields.io/github/license/Cobbdevv/luau-grader" alt="License">
 </p>
 
-Luau Grader is a professional-grade static analysis and grading engine for Luau code. It uses AST parsing to thoroughly analyze your code against 77 rules across 5 tiers, then scores it across 7 dimensions to produce a letter grade, technical debt estimate, and prioritized improvement path.
+Luau Grader is a professional-grade static analysis and grading engine for Luau code. It uses AST parsing to thoroughly analyze your code against 91 rules across 5 tiers, then scores it across 7 dimensions to produce a letter grade, technical debt estimate, and prioritized improvement path.
 
 Built with Rust and Tauri. Ships as both a CLI tool and a desktop application.
 
@@ -20,7 +20,7 @@ Built with Rust and Tauri. Ships as both a CLI tool and a desktop application.
 
 ## Features
 
-- **77 rules** across Beginner, Intermediate, Advanced, Front Page, and Security tiers
+- **91 rules** across Beginner, Intermediate, Advanced, Front Page, and Security tiers
 - **7-dimensional grading** evaluating Structure, API Correctness, Error Handling, Performance, Readability, Safety, and Security
 - **Per-function grades** with cyclomatic and cognitive complexity analysis
 - **Technical debt estimation** in minutes with category breakdown
@@ -104,7 +104,7 @@ Exit codes: `0` = clean, `1` = warnings only, `2` = errors found.
 | B011 | Common Bugs | Method argument count validation | |
 | B012 | Common Bugs | Standard library argument count validation | |
 
-### Intermediate (22 rules)
+### Intermediate (28 rules)
 
 | ID | Category | Description | Fix |
 |:---|:---|:---|:---:|
@@ -131,7 +131,7 @@ Exit codes: `0` = clean, `1` = warnings only, `2` = errors found.
 | I024 | Code Quality | Inconsistent return values across paths | |
 | I025 | Code Quality | Magic numbers without named constants | |
 
-### Advanced (20 rules)
+### Advanced (26 rules)
 
 | ID | Category | Description | Fix |
 |:---|:---|:---|:---:|
@@ -156,7 +156,7 @@ Exit codes: `0` = clean, `1` = warnings only, `2` = errors found.
 | A021 | Performance | `FindFirstChild` inside loop | |
 | A022 | Code Quality | Global writes without `local` keyword | |
 
-### Front Page (15 rules)
+### Front Page (17 rules)
 
 | ID | Category | Description | Fix |
 |:---|:---|:---|:---:|
@@ -282,7 +282,7 @@ luau-grader/
       ruleset_config.rs        .luaugraderrc config parsing
       lib.rs                   Library root
     tests/
-      rules.rs                 136 integration tests
+      rules.rs                 159 integration tests
   luau-grader-cli/             Standalone CLI binary
     src/
       main.rs                  check, check-dir, fix, grade, list-rules
