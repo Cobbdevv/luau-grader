@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: nicolo-ribaudo/chore-setup-node@v1
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
       - run: cargo install tauri-cli --version "^2"
