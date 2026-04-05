@@ -14,10 +14,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --release -p luau-grader-cli
+      - run: |
+          Copy-Item target/release/luau-grader.exe luau-grader-cli.exe
       - uses: actions/upload-artifact@v4
         with:
           name: luau-grader-cli-windows
-          path: target/release/luau-grader.exe
+          path: luau-grader-cli.exe
 
   build-tauri:
     runs-on: windows-latest
@@ -31,10 +33,8 @@ jobs:
       - run: cargo tauri build
       - uses: actions/upload-artifact@v4
         with:
-          name: luau-grader-installer-windows
-          path: |
-            target/release/bundle/msi/*.msi
-            target/release/bundle/nsis/*.exe
+          name: luau-grader-app-windows
+          path: target/release/luau-grader-app.exe
 
   release:
     needs: [build-cli, build-tauri]
@@ -46,7 +46,6 @@ jobs:
           path: artifacts
       - uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
           files: |
-            artifacts/luau-grader-cli-windows/luau-grader.exe
-            artifacts/luau-grader-installer-windows/**/*
+            artifacts/luau-grader-cli-windows/luau-grader-cli.exe
+            artifacts/luau-grader-app-windows/luau-grader-app.exe
