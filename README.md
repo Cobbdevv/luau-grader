@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/Cobbdevv/luau-grader/actions/workflows/ci.yml"><img src="https://github.com/Cobbdevv/luau-grader/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI"></a>
   <img src="https://img.shields.io/badge/rules-93-blue" alt="93 Rules">
-  <img src="https://img.shields.io/badge/tests-159-brightgreen" alt="159 Tests">
+  <img src="https://img.shields.io/badge/tests-161-brightgreen" alt="161 Tests">
   <img src="https://img.shields.io/badge/language-Rust-orange" alt="Rust">
   <img src="https://img.shields.io/github/license/Cobbdevv/luau-grader" alt="License">
 </p>
