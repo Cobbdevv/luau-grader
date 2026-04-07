@@ -33,6 +33,16 @@ Built with Rust and Tauri. Ships as both a CLI tool and a desktop application.
 
 ---
 
+## Desktop App
+
+<p align="center">
+  <img src="assets/screenshot_dracula.png" alt="Luau Grader desktop app" width="800">
+</p>
+
+The desktop app includes a code editor with Luau syntax highlighting, one-click grading, an animated score ring with 7 dimension bars, per-function grade table, technical debt breakdown, improvement path, and a theme gallery with Dracula, Monochrome, and Tokyo Night themes.
+
+---
+
 ## CLI Usage
 
 ```bash

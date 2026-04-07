@@ -28,3 +28,8 @@ Desktop.ini
 test_sample.luau
 test_all_new_rules.luau
 test_profile.luau
+tester_code.luau
+tester_report.md
+
+# Calibration data
+calibration/

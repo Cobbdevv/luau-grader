@@ -73,17 +73,23 @@ Box::new(intermediate::FunctionTooLongRule::new(max_lines)),
 - `I` prefix for Intermediate.
 - `A` prefix for Advanced.
 - `F` prefix for Front Page.
+- `S` prefix for Security.
 - Increment the number from the last rule in that tier.
 
 ### Category Names
 
 - Code Style
+- Code Quality
+- Code Hygiene
 - Module Architecture
 - Memory Management
 - Performance
 - Networking
 - Data Persistence
 - Common Bugs
+- Error Handling
+- API Deprecation
+- Security
 
 ### The AnalysisContext
 
