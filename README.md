@@ -6,13 +6,13 @@
 
 <p align="center">
   <a href="https://github.com/Cobbdevv/luau-grader/actions/workflows/ci.yml"><img src="https://github.com/Cobbdevv/luau-grader/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI"></a>
-  <img src="https://img.shields.io/badge/rules-91-blue" alt="91 Rules">
+  <img src="https://img.shields.io/badge/rules-93-blue" alt="93 Rules">
   <img src="https://img.shields.io/badge/tests-159-brightgreen" alt="159 Tests">
   <img src="https://img.shields.io/badge/language-Rust-orange" alt="Rust">
   <img src="https://img.shields.io/github/license/Cobbdevv/luau-grader" alt="License">
 </p>
 
-Luau Grader is a professional-grade static analysis and grading engine for Luau code. It uses AST parsing to thoroughly analyze your code against 91 rules across 5 tiers, then scores it across 7 dimensions to produce a letter grade, technical debt estimate, and prioritized improvement path.
+Luau Grader is a professional-grade static analysis and grading engine for Luau code. It uses AST parsing to thoroughly analyze your code against 93 rules across 5 tiers, then scores it across 7 dimensions to produce a letter grade, technical debt estimate, and prioritized improvement path.
 
 Built with Rust and Tauri. Ships as both a CLI tool and a desktop application.
 
@@ -20,7 +20,7 @@ Built with Rust and Tauri. Ships as both a CLI tool and a desktop application.
 
 ## Features
 
-- **91 rules** across Beginner, Intermediate, Advanced, Front Page, and Security tiers
+- **93 rules** across Beginner, Intermediate, Advanced, Front Page, and Security tiers
 - **7-dimensional grading** evaluating Structure, API Correctness, Error Handling, Performance, Readability, Safety, and Security
 - **Per-function grades** with cyclomatic and cognitive complexity analysis
 - **Technical debt estimation** in minutes with category breakdown
@@ -104,7 +104,7 @@ Exit codes: `0` = clean, `1` = warnings only, `2` = errors found.
 | B011 | Common Bugs | Method argument count validation | |
 | B012 | Common Bugs | Standard library argument count validation | |
 
-### Intermediate (28 rules)
+### Intermediate (29 rules)
 
 | ID | Category | Description | Fix |
 |:---|:---|:---|:---:|
@@ -129,9 +129,16 @@ Exit codes: `0` = clean, `1` = warnings only, `2` = errors found.
 | I021 | Code Quality | Negated if condition with else block | |
 | I022 | Code Quality | Comparison with `math.huge` | |
 | I024 | Code Quality | Inconsistent return values across paths | |
-| I025 | Code Quality | Magic numbers without named constants | |
+| I026 | Code Quality | Variable shadowing in nested scope | |
+| I027 | Code Quality | Unused local variable | |
+| I028 | Code Quality | Repeated deep property access chain | |
+| I029 | Code Style | Vague variable names (`temp`, `obj`, `stuff`) | |
+| I030 | Code Style | Redundant boolean comparison (`== true`) | |
+| I031 | Performance | `task.spawn`/`defer` wrapping a single call in closure | |
+| I032 | Code Quality | Duplicate `GetService` calls | |
+| I033 | Code Style | Abbreviated variable names (`plr`, `hrp`, `hum`) | |
 
-### Advanced (26 rules)
+### Advanced (27 rules)
 
 | ID | Category | Description | Fix |
 |:---|:---|:---|:---:|
@@ -155,25 +162,34 @@ Exit codes: `0` = clean, `1` = warnings only, `2` = errors found.
 | A020 | Common Bugs | `string.format` specifier/argument mismatch | |
 | A021 | Performance | `FindFirstChild` inside loop | |
 | A022 | Code Quality | Global writes without `local` keyword | |
+| A023 | API Deprecation | Deprecated BodyMover constraints | |
+| A024 | Code Quality | Direct `Health` assignment bypasses ForceField | |
+| A025 | Code Quality | Nested `pcall`/`xpcall` | |
+| A026 | Data Persistence | `SetAsync` inside `pcall` still unsafe for concurrency | |
+| A027 | Error Handling | `pcall` error captured but never logged | |
+| A028 | Code Quality | `:Connect()` callback disconnects itself, use `:Once()` | |
+| A029 | Code Quality | Global table (`_G`) usage | |
 
 ### Front Page (17 rules)
 
 | ID | Category | Description | Fix |
 |:---|:---|:---|:---:|
 | F001 | Code Style | Missing `--!strict` directive | Y |
-| F002 | Memory Management | `Parent = nil` without `:Destroy()` | |
+| F002 | Memory Management | `Parent = nil` without `:Destroy()` | Y |
 | F003 | Module Architecture | `require()` inside loops | |
-| F004 | Code Style | `GetService("Workspace")` instead of `workspace` | |
-| F005 | Error Handling | `FindFirstChild` result chained without nil check | |
-| F006 | API Deprecation | Deprecated `:Remove()` | |
+| F004 | Code Style | `GetService("Workspace")` instead of `workspace` | Y |
+| F005 | Common Bugs | `FindFirstChild` result chained without nil check | |
+| F006 | API Deprecation | Deprecated `:Remove()` | Y |
 | F007 | Common Bugs | `string.sub()` with index 0 | |
 | F008 | Common Bugs | `task.wait()` with negative delay | |
 | F009 | Common Bugs | `Instance.new("")` empty class name | |
 | F010 | Common Bugs | `RenderStepped` on server | |
-| F011 | Code Quality | `task.wait()` return value captured | |
+| F011 | Code Style | `task.wait()` return value captured | |
 | F012 | Common Bugs | `:Connect()` with non-function argument | |
 | F015 | Code Hygiene | TODO/FIXME/HACK comments | |
 | F016 | Code Quality | File too large (>500 lines) | |
+| F017 | Code Quality | Function with 3+ params missing type annotations | |
+| F018 | Code Quality | Hardcoded instance path via long dot-chain | |
 | B013 | API Deprecation | `FilteringEnabled` check (always true since 2018) | |
 
 ### Security (8 rules)
@@ -266,9 +282,9 @@ luau-grader/
       analyzer/                AST walker and analysis context
       rulesets/                Rule implementations by tier
         beginner.rs            12 rules
-        intermediate.rs        22 rules
-        advanced.rs            20 rules
-        front_page.rs          15 rules
+        intermediate.rs        29 rules
+        advanced.rs            27 rules
+        front_page.rs          17 rules
         security.rs            8 rules
         mod.rs                 Rule registration and tier mapping
       config.rs                Tier enum
@@ -286,6 +302,7 @@ luau-grader/
   luau-grader-cli/             Standalone CLI binary
     src/
       main.rs                  check, check-dir, fix, grade, list-rules
+  luau-grader-wasm/            WebAssembly bindings
   src-tauri/                   Tauri desktop application
   src/                         Frontend (HTML/CSS/JS)
 ```

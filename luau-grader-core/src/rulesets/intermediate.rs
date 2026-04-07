@@ -940,7 +940,7 @@ impl InconsistentReturnRule {
                     && if_stmt.else_block().is_none()
                     && if_stmt.else_if().is_none()
                     && stmts_in_block.is_empty()
-                    && if_block.last_stmt().map_or(false, |ls| {
+                    && if_block.last_stmt().is_some_and(|ls| {
                         if let ast::LastStmt::Return(ret) = ls {
                             ret.returns().is_empty()
                         } else {

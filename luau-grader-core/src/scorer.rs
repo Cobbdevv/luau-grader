@@ -159,7 +159,7 @@ fn score_structure(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Dimensi
         .count();
 
     if code_quality_issues > 0 {
-        let penalty = (code_quality_issues as i32 * 1).min(10);
+        let penalty = (code_quality_issues as i32).min(10);
         score -= penalty;
         deductions.push(format!("{} code quality issues (shadowed vars, unused locals, repeated chains)", code_quality_issues));
     }

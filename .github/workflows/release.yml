@@ -34,7 +34,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: luau-grader-app-windows
-          path: target/release/luau-grader-app.exe
+          path: src-tauri/target/release/luau-grader-app.exe
 
   release:
     needs: [build-cli, build-tauri]

@@ -788,7 +788,7 @@ impl StringFormatMismatchRule {
                 if let Some(Suffix::Index(Index::Dot { name: method, .. })) = suffixes.first() {
                     if method.token().to_string() == "format" {
                         if let Some(Suffix::Call(Call::AnonymousCall(ast::FunctionArgs::Parentheses { arguments, .. }))) = suffixes.get(1) {
-                            if arguments.iter().last().map_or(false, |a| matches!(a, ast::Expression::FunctionCall(_))) {
+                            if arguments.iter().last().is_some_and(|a| matches!(a, ast::Expression::FunctionCall(_))) {
                                 return Vec::new();
                             }
                             let arg_count = arguments.len();
