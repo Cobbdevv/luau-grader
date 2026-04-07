@@ -9,6 +9,53 @@ fn span_from_node(node: &impl Node) -> Option<Span> {
     node.start_position().map(|pos| Span { line: pos.line(), column: pos.character() })
 }
 
+fn strip_string_contents(line: &str) -> String {
+    let mut result = String::with_capacity(line.len());
+    let mut in_string = false;
+    let mut string_char = '"';
+    let bytes = line.as_bytes();
+    let mut idx = 0;
+    while idx < bytes.len() {
+        let ch = bytes[idx] as char;
+        if in_string {
+            if ch == string_char {
+                result.push(ch);
+                in_string = false;
+            } else {
+                result.push(' ');
+            }
+        } else if ch == '"' || ch == '\'' {
+            in_string = true;
+            string_char = ch;
+            result.push(ch);
+        } else {
+            result.push(ch);
+        }
+        idx += 1;
+    }
+    result
+}
+
+fn count_keyword_occurrences(line: &str, keyword: &str) -> usize {
+    let mut count = 0;
+    let mut search_from = 0;
+    let bytes = line.as_bytes();
+    let kw_len = keyword.len();
+    while let Some(pos) = line[search_from..].find(keyword) {
+        let abs = search_from + pos;
+        let before_ok = abs == 0
+            || (!bytes[abs - 1].is_ascii_alphanumeric() && bytes[abs - 1] != b'_');
+        let after_pos = abs + kw_len;
+        let after_ok = after_pos >= bytes.len()
+            || (!bytes[after_pos].is_ascii_alphanumeric() && bytes[after_pos] != b'_');
+        if before_ok && after_ok {
+            count += 1;
+        }
+        search_from = abs + 1;
+    }
+    count
+}
+
 #[derive(Debug)]
 pub struct FunctionTooLongRule {
     pub max_lines: usize,
@@ -406,25 +453,42 @@ impl Rule for DebugPrintWarnRule {
     fn category(&self) -> &'static str { "Code Quality" }
     fn description(&self) -> &'static str { "print() / warn() calls left in code" }
     fn tier(&self) -> &'static str { "Intermediate" }
-    fn check_stmt(&self, stmt: &ast::Stmt, _ctx: &AnalysisContext) -> Vec<Diagnostic> {
-        if let ast::Stmt::FunctionCall(call) = stmt {
-            if let Prefix::Name(name) = call.prefix() {
-                let fn_name = name.token().to_string();
-                if fn_name == "print" || fn_name == "warn" {
-                    let suffixes: Vec<_> = call.suffixes().collect();
-                    if matches!(suffixes.first(), Some(Suffix::Call(Call::AnonymousCall(_)))) && suffixes.len() == 1 {
-                        return vec![Diagnostic {
-                            rule_id: self.id().to_string(), severity: self.severity(), category: self.category().to_string(),
-                            message: format!("{fn_name}() call - consider removing debug statements before shipping"),
-                            span: span_from_node(stmt),
-                            suggestion: Some("remove or replace with a proper logging system".to_string()),
-                            fixable: false,
-                        }];
+    fn finalize(&self, ctx: &AnalysisContext) -> Vec<Diagnostic> {
+        let mut results = Vec::new();
+        let lines: Vec<&str> = ctx.source.lines().collect();
+        for (i, line) in lines.iter().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("--") { continue; }
+            let is_print = trimmed.starts_with("print(") || trimmed.starts_with("print (");
+            let is_warn = trimmed.starts_with("warn(") || trimmed.starts_with("warn (");
+            if !is_print && !is_warn { continue; }
+
+            if is_warn && i > 0 {
+                let mut in_pcall_error_branch = false;
+                for prev_line in lines[..i].iter().rev().take(10) {
+                    let prev = prev_line.trim();
+                    if prev.contains("pcall(") || prev.contains("xpcall(") {
+                        in_pcall_error_branch = true;
+                        break;
+                    }
+                    if prev.contains("not success") || prev.contains("not ok") {
+                        in_pcall_error_branch = true;
+                        break;
                     }
                 }
+                if in_pcall_error_branch { continue; }
             }
+
+            let fn_name = if is_print { "print" } else { "warn" };
+            results.push(Diagnostic {
+                rule_id: self.id().to_string(), severity: self.severity(), category: self.category().to_string(),
+                message: format!("{fn_name}() call - consider removing debug statements before shipping"),
+                span: Some(Span { line: i + 1, column: 1 }),
+                suggestion: Some("remove or replace with a proper logging system".to_string()),
+                fixable: false,
+            });
         }
-        Vec::new()
+        results
     }
 }
 
@@ -488,24 +552,37 @@ impl Rule for TypeVsTypeofRule {
     fn category(&self) -> &'static str { "Code Quality" }
     fn description(&self) -> &'static str { "type() returns 'userdata' for Roblox types - use typeof() instead" }
     fn tier(&self) -> &'static str { "Intermediate" }
-    fn check_expression(&self, expr: &ast::Expression, _ctx: &AnalysisContext) -> Vec<Diagnostic> {
-        if let ast::Expression::FunctionCall(call) = expr {
-            if let Prefix::Name(name) = call.prefix() {
-                if name.token().to_string() == "type" {
-                    let suffixes: Vec<_> = call.suffixes().collect();
-                    if matches!(suffixes.first(), Some(Suffix::Call(Call::AnonymousCall(_)))) && suffixes.len() == 1 {
-                        return vec![Diagnostic {
-                            rule_id: self.id().to_string(), severity: self.severity(), category: self.category().to_string(),
-                            message: "type() returns 'userdata' for Roblox types - consider typeof() for more specific type info".to_string(),
-                            span: span_from_node(expr),
-                            suggestion: Some("typeof(value) returns specific types like 'Vector3', 'Instance', etc.".to_string()),
-                            fixable: false,
-                        }];
-                    }
-                }
-            }
+    fn finalize(&self, ctx: &AnalysisContext) -> Vec<Diagnostic> {
+        let lua_primitives = ["\"number\"", "\"string\"", "\"table\"", "\"boolean\"",
+            "\"function\"", "\"thread\"", "\"nil\"", "\"userdata\"",
+            "'number'", "'string'", "'table'", "'boolean'",
+            "'function'", "'thread'", "'nil'", "'userdata'"];
+
+        let mut results = Vec::new();
+        for (i, line) in ctx.source.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("--") { continue; }
+            if !trimmed.contains("type(") { continue; }
+            if trimmed.contains("typeof(") { continue; }
+
+            let comparing_primitive = lua_primitives.iter().any(|p| trimmed.contains(p));
+            if comparing_primitive { continue; }
+
+            let has_type_call = trimmed.contains("type(") && !trimmed.contains("typeof(");
+            if !has_type_call { continue; }
+
+            let stripped = trimmed.replace("typeof(", "_______(");
+            if !stripped.contains("type(") { continue; }
+
+            results.push(Diagnostic {
+                rule_id: self.id().to_string(), severity: self.severity(), category: self.category().to_string(),
+                message: "type() returns 'userdata' for Roblox types - consider typeof() for more specific type info".to_string(),
+                span: Some(Span { line: i + 1, column: 1 }),
+                suggestion: Some("typeof(value) returns specific types like 'Vector3', 'Instance', etc.".to_string()),
+                fixable: false,
+            });
         }
-        Vec::new()
+        results
     }
 }
 
@@ -681,7 +758,16 @@ impl HashLengthOnDictRule {
         for line in source.lines() {
             if line.contains(&pattern) {
                 let after_brace = line.split('{').nth(1).unwrap_or("");
-                if after_brace.contains('=') && !after_brace.trim().is_empty() {
+                let trimmed_content = after_brace.trim().trim_end_matches('}').trim();
+                if trimmed_content.is_empty() {
+                    return false;
+                }
+                let has_key_value = trimmed_content.contains('=');
+                let has_array_element = trimmed_content.split(',').any(|part| {
+                    let p = part.trim();
+                    !p.is_empty() && !p.contains('=')
+                });
+                if has_key_value && !has_array_element {
                     return true;
                 }
             }
@@ -817,14 +903,16 @@ impl Rule for InconsistentReturnRule {
         let block = body.block();
         let mut returns_with_value = 0;
         let mut returns_without_value = 0;
+        let mut guard_clause_bare_returns = 0;
 
-        self.count_returns(block, &mut returns_with_value, &mut returns_without_value);
+        self.count_returns(block, &mut returns_with_value, &mut returns_without_value, &mut guard_clause_bare_returns, true);
 
-        if returns_with_value > 0 && returns_without_value > 0 {
+        let meaningful_bare = returns_without_value.saturating_sub(guard_clause_bare_returns);
+        if returns_with_value > 0 && meaningful_bare > 0 {
             return vec![Diagnostic {
                 rule_id: self.id().to_string(), severity: self.severity(), category: self.category().to_string(),
                 message: format!("function has {} returns with values and {} bare returns - this is inconsistent",
-                    returns_with_value, returns_without_value),
+                    returns_with_value, meaningful_bare),
                 span: span_from_node(body),
                 suggestion: Some("ensure all return paths return a value, or none do".to_string()),
                 fixable: false,
@@ -834,7 +922,7 @@ impl Rule for InconsistentReturnRule {
     }
 }
 impl InconsistentReturnRule {
-    fn count_returns(&self, block: &ast::Block, with_val: &mut usize, without_val: &mut usize) {
+    fn count_returns(&self, block: &ast::Block, with_val: &mut usize, without_val: &mut usize, guard_bare: &mut usize, is_top_level: bool) {
         if let Some(last) = block.last_stmt() {
             if let ast::LastStmt::Return(ret) = last {
                 if ret.returns().is_empty() {
@@ -846,13 +934,31 @@ impl InconsistentReturnRule {
         }
         for stmt in block.stmts() {
             if let ast::Stmt::If(if_stmt) = stmt {
-                self.count_returns(if_stmt.block(), with_val, without_val);
+                let if_block = if_stmt.block();
+                let stmts_in_block: Vec<_> = if_block.stmts().collect();
+                let is_guard = is_top_level
+                    && if_stmt.else_block().is_none()
+                    && if_stmt.else_if().is_none()
+                    && stmts_in_block.is_empty()
+                    && if_block.last_stmt().map_or(false, |ls| {
+                        if let ast::LastStmt::Return(ret) = ls {
+                            ret.returns().is_empty()
+                        } else {
+                            false
+                        }
+                    });
+
+                if is_guard {
+                    *guard_bare += 1;
+                }
+
+                self.count_returns(if_block, with_val, without_val, guard_bare, false);
                 if let Some(else_block) = if_stmt.else_block() {
-                    self.count_returns(else_block, with_val, without_val);
+                    self.count_returns(else_block, with_val, without_val, guard_bare, false);
                 }
                 if let Some(else_ifs) = if_stmt.else_if() {
                     for else_if in else_ifs {
-                        self.count_returns(else_if.block(), with_val, without_val);
+                        self.count_returns(else_if.block(), with_val, without_val, guard_bare, false);
                     }
                 }
             }
@@ -878,12 +984,14 @@ impl Rule for VariableShadowingRule {
             let trimmed = line.trim();
             if trimmed.starts_with("--") { continue; }
 
-            let opens = trimmed.matches("function").count()
-                + trimmed.matches("do").count()
-                + trimmed.matches("then").count()
-                + trimmed.matches("repeat").count();
-            let closes = trimmed.matches("end").count()
-                + trimmed.matches("until").count();
+            let stripped = strip_string_contents(trimmed);
+
+            let opens = count_keyword_occurrences(&stripped, "function")
+                + count_keyword_occurrences(&stripped, "do")
+                + count_keyword_occurrences(&stripped, "then")
+                + count_keyword_occurrences(&stripped, "repeat");
+            let closes = count_keyword_occurrences(&stripped, "end")
+                + count_keyword_occurrences(&stripped, "until");
 
             for name in Self::extract_local_names(trimmed) {
                 if name == "_" || name == "self" { continue; }
@@ -1099,9 +1207,8 @@ impl RepeatedAccessChainRule {
 }
 
 const VAGUE_NAMES: &[&str] = &[
-    "temp", "obj", "val", "value", "stuff",
-    "thing", "item", "tbl", "str", "num", "func", "ret", "tmp", "res",
-    "args", "params", "input", "output", "buf", "arr", "list", "map",
+    "temp", "obj", "stuff",
+    "thing", "tbl", "str", "num", "func", "tmp", "res",
     "cb", "fn", "proc", "ref",
 ];
 
@@ -1308,6 +1415,92 @@ impl Rule for DuplicateGetServiceRule {
             }
         }
         results
+    }
+}
+
+const ABBREVIATED_NAMES: &[&str] = &[
+    "plr", "plrs", "char", "chr", "hrp", "hum", "gui", "btn",
+    "lp", "rs", "ss", "sss", "ts", "uis", "cas", "tws",
+    "conn", "inst", "obj", "val", "tbl", "num", "str",
+    "cb", "fn", "func", "cfg", "mgr", "svc", "evt",
+    "pos", "vel", "dir", "rot", "cf", "vec",
+    "anim", "desc", "srv",
+];
+
+const ABBREVIATED_EXCEPTIONS: &[&str] = &[
+    "ok", "id", "dt", "pi", "hp", "ai", "ui", "ip", "io", "os",
+    "min", "max", "key", "new", "old", "raw", "err", "msg", "log",
+    "red", "top", "end", "nil", "hit", "ray", "run", "add", "set", "get",
+];
+
+#[derive(Debug)] pub struct AbbreviatedVariableNameRule;
+impl Rule for AbbreviatedVariableNameRule {
+    fn id(&self) -> &'static str { "I033" }
+    fn severity(&self) -> Severity { Severity::Info }
+    fn category(&self) -> &'static str { "Code Style" }
+    fn description(&self) -> &'static str { "Abbreviated variable name reduces readability" }
+    fn tier(&self) -> &'static str { "Intermediate" }
+    fn check_stmt(&self, stmt: &ast::Stmt, _ctx: &AnalysisContext) -> Vec<Diagnostic> {
+        let mut results = Vec::new();
+        if let ast::Stmt::LocalAssignment(local) = stmt {
+            for name in local.names() {
+                let var_name = name.token().to_string();
+                let lower = var_name.to_lowercase();
+                if lower.len() >= 2 && lower.len() <= 4
+                    && ABBREVIATED_NAMES.contains(&lower.as_str())
+                    && !ABBREVIATED_EXCEPTIONS.contains(&lower.as_str())
+                {
+                    results.push(Diagnostic {
+                        rule_id: self.id().to_string(), severity: self.severity(), category: self.category().to_string(),
+                        message: format!("'{var_name}' is an abbreviated name - use a descriptive name instead"),
+                        span: name.start_position().map(|p| Span { line: p.line(), column: p.character() }),
+                        suggestion: Some(self.suggest_full_name(&lower)),
+                        fixable: false,
+                    });
+                }
+            }
+        }
+        results
+    }
+}
+impl AbbreviatedVariableNameRule {
+    fn suggest_full_name(&self, abbr: &str) -> String {
+        match abbr {
+            "plr" | "plrs" => "player / players".to_string(),
+            "char" | "chr" => "character".to_string(),
+            "hrp" => "humanoidRootPart".to_string(),
+            "hum" => "humanoid".to_string(),
+            "gui" => "screenGui / gui name".to_string(),
+            "btn" => "button".to_string(),
+            "lp" => "localPlayer".to_string(),
+            "rs" => "ReplicatedStorage (use full GetService name)".to_string(),
+            "ss" | "sss" => "ServerStorage / ServerScriptService (use full name)".to_string(),
+            "ts" => "TweenService (use full GetService name)".to_string(),
+            "uis" => "UserInputService (use full name)".to_string(),
+            "cas" => "ContextActionService (use full name)".to_string(),
+            "tws" => "TweenService (use full name)".to_string(),
+            "conn" => "connection".to_string(),
+            "inst" | "obj" => "instance / object (be more specific)".to_string(),
+            "val" => "value (be more specific about what value)".to_string(),
+            "tbl" => "table (be specific: items, entries, etc.)".to_string(),
+            "num" => "number (be specific: count, amount, etc.)".to_string(),
+            "str" => "text / name / label (be specific)".to_string(),
+            "cb" | "fn" | "func" => "callback / handler (describe what it does)".to_string(),
+            "cfg" => "config / configuration".to_string(),
+            "mgr" => "manager".to_string(),
+            "svc" => "service".to_string(),
+            "evt" => "event".to_string(),
+            "pos" => "position".to_string(),
+            "vel" => "velocity".to_string(),
+            "dir" => "direction".to_string(),
+            "rot" => "rotation".to_string(),
+            "cf" => "cframe".to_string(),
+            "vec" => "vector".to_string(),
+            "anim" => "animation".to_string(),
+            "desc" => "description".to_string(),
+            "srv" => "server".to_string(),
+            _ => "use a descriptive name".to_string(),
+        }
     }
 }
 

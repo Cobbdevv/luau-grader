@@ -1,5 +1,79 @@
 # Changelog
 
+## 1.2.0
+
+### Scoring Engine Overhaul — Calibrated Against 630 Production Scripts
+
+The entire scoring engine has been recalibrated against a 630-script production codebase to eliminate score inflation and systematic bias. Every change was validated against 18 expert-graded reference scripts to ensure accuracy.
+
+#### Length-Agnostic Scoring
+- Removed all file-length-based penalties — long files are no longer penalized for being long
+- Removed tiny-file Performance inflation — scripts under 30 lines no longer auto-receive 80 in Performance
+- Scoring is now purely quality-based regardless of file size
+
+#### Stricter Baselines
+- Performance baseline lowered from 92 to 82 for scripts with no detected issues
+- API Correctness baseline lowered from 80 to 75 for scripts with no API surface
+- Security baseline lowered from 80 to 75 for scripts with no security surface
+- Error Handling baseline lowered from 100 to 90
+- Performance with issues now deducts from 82 (not 100), preventing scripts with issues from scoring higher than clean ones
+
+#### Quality Ceiling
+- Scripts missing all quality evidence (no `--!strict`, no type annotations, no pcall) are now capped at 75 overall
+- Prevents low-effort scripts from coasting on dimensions with no violations
+
+#### Strict Mode Enforcement
+- Missing `--!strict` changed from a +3 bonus to a **-10 penalty**
+- Strict mode is now treated as a baseline expectation, not a reward
+
+#### Universal Good Practices
+- Good practices checks (strict mode, type annotations, pcall, module pattern) now apply to **all files with functions**, not just small files
+- Missing all 4 practices: -20 penalty (was -15)
+- Missing 3: -15 penalty
+- Missing 2: -8 penalty
+
+#### Error Handling Hardening
+- New tiered penalty system for missing pcall:
+  - Uses DataStoreService/HttpService/MarketplaceService with no pcall: -35
+  - Has risky operations (3+ services or functions) with no pcall: -30 server / -25 client
+  - Has functions but no pcall anywhere: -20 server / -15 client
+- Removed redundant duplicate "no error handling in any function" penalty that was double-counting
+
+#### Dimension Floors
+- All dimensions now have a minimum score floor (10-15) to prevent extreme 0-scores on large functional files
+
+#### Readability Tightening
+- Single-letter variable penalty increased from 3 to 5 points per occurrence
+- Naming quality thresholds raised: <3.0 avg = -30, <3.5 = -15, <4.0 = -8 (was <2.0/-2.5/-3.0)
+- Cognitive complexity penalties now capped at -15 total (prevents runaway deductions on large files)
+- Vague names list refined to reduce false positives (removed "val", "value", "item", "args", "params", "input", "output", "buf", "arr", "list", "map")
+
+### New Rules
+
+#### I033 — Abbreviated Variable Names
+- Detects 37 common Roblox abbreviations: `plr`, `hrp`, `hum`, `ts`, `uis`, `cas`, `btn`, `conn`, `cfg`, `mgr`, `pos`, `vel`, `dir`, `rot`, `cf`, `vec`, and more
+- Provides specific suggestions for each abbreviation (e.g., `plr` → `player`, `hrp` → `humanoidRootPart`)
+- Has a built-in exception list for universally understood short names (`ok`, `id`, `dt`, `hp`, `ai`, `ui`, etc.)
+- Impacts Readability score: -3 per occurrence, capped at -20
+
+#### A029 — Global Table (`_G`) Usage
+- Detects both reads and writes to the `_G` global table
+- Flags implicit cross-script dependencies that make code harder to test and reason about
+- Suggests using ModuleScripts and `require()` instead
+- Impacts Readability score: -5 per occurrence, capped at -20
+
+### Bug Fixes
+- Fixed InconsistentReturnRule (I023) false positives: guard clauses (`if not x then return end`) are no longer counted as bare returns
+- Fixed VariableShadowingRule (I027) false positives: keyword matching inside string literals no longer causes incorrect scope tracking (uses `strip_string_contents` + `count_keyword_occurrences`)
+- Fixed Performance scoring backwards: scripts with 1 minor issue could previously score higher (97) than scripts with zero issues (92)
+
+### Calibration Results
+- 93 rules across 5 tiers (was 91 in v1.1.0)
+- 159 integration tests, zero failures
+- Validated against 630 production scripts from a front-page Roblox game
+- 13/18 expert-graded scripts within ±5 points of expert assessment
+- Average scoring gap: 3.7 points (was 8.8 in v1.1.0)
+
 ## 1.1.0
 
 ### Scoring Engine Recalibration

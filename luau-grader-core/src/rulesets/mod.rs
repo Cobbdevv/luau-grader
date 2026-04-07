@@ -92,6 +92,7 @@ pub fn all_rules_with_config(config: &RulesetConfig) -> Vec<Box<dyn Rule>> {
         Box::new(intermediate::RedundantBooleanComparisonRule),
         Box::new(intermediate::TaskSpawnClosureWrappingRule),
         Box::new(intermediate::DuplicateGetServiceRule),
+        Box::new(intermediate::AbbreviatedVariableNameRule),
 
         Box::new(advanced::InstanceNewInLoopRule),
         Box::new(advanced::ConnectWithoutStoreRule),
@@ -119,6 +120,7 @@ pub fn all_rules_with_config(config: &RulesetConfig) -> Vec<Box<dyn Rule>> {
         Box::new(advanced::SetAsyncInPcallRule),
         Box::new(advanced::PcallErrorSwallowedRule),
         Box::new(advanced::ConnectWhenOnceSufficesRule),
+        Box::new(advanced::GlobalTableUsageRule),
 
         Box::new(front_page::NoStrictModeRule),
         Box::new(front_page::ParentNilWithoutDestroyRule),

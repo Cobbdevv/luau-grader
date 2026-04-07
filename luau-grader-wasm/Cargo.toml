@@ -1,0 +1,13 @@
+[package]
+name = "luau-grader-wasm"
+version = "1.0.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+serde-wasm-bindgen = "0.6"
+serde = { version = "1.0", features = ["derive"] }
+luau-grader-core = { path = "../luau-grader-core", version = "1.0.0" }

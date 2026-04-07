@@ -130,7 +130,7 @@ fn a002_connect_stored() {
 
 #[test]
 fn a003_string_concat_in_loop() {
-    let source = "for i = 1, 10 do\n    local s = \"a\" .. \"b\"\nend\n";
+    let source = "local result = \"\"\nfor i = 1, 10 do\n    result = result .. tostring(i)\nend\n";
     let ids = grade(source, Tier::Advanced);
     assert!(ids.contains(&"A003".to_string()));
 }
@@ -1024,7 +1024,7 @@ fn i032_single_getservice_ok() {
 
 #[test]
 fn a027_pcall_error_swallowed() {
-    let source = "local success, err = pcall(function()\n    doSomething()\nend)\nif not success then\n    return nil\nend\n";
+    let source = "local success, err = pcall(function()\n    doSomething()\nend)\nif not success then\n    local x = 1\nend\n";
     let ids = grade(source, Tier::Advanced);
     assert!(ids.contains(&"A027".to_string()));
 }
@@ -1097,7 +1097,7 @@ fn hollow_performance_small_script() {
         Tier::FrontPage, "test.luau", &[], &config,
     ).unwrap();
     let perf = report.dimensions.iter().find(|d| d.name == "Performance").unwrap();
-    assert!(perf.score <= 80, "Small script with no perf-relevant code should score <= 80, got {}", perf.score);
+    assert_eq!(perf.score, 82, "Script with no perf issues should score 82 regardless of size, got {}", perf.score);
 }
 
 #[test]
@@ -1108,7 +1108,7 @@ fn hollow_security_no_remotes() {
         Tier::FrontPage, "test.luau", &[], &config,
     ).unwrap();
     let security = report.dimensions.iter().find(|d| d.name == "Security").unwrap();
-    assert_eq!(security.score, 80, "Script with no security surface should score 80, got {}", security.score);
+    assert_eq!(security.score, 75, "Script with no security surface should score 75, got {}", security.score);
 }
 
 #[test]
@@ -1119,7 +1119,7 @@ fn hollow_api_no_services() {
         Tier::FrontPage, "test.luau", &[], &config,
     ).unwrap();
     let api = report.dimensions.iter().find(|d| d.name == "API Correctness").unwrap();
-    assert_eq!(api.score, 80, "Script with no API usage should score 80, got {}", api.score);
+    assert_eq!(api.score, 75, "Script with no API usage should score 75, got {}", api.score);
 }
 
 #[test]

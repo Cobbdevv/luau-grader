@@ -37,6 +37,16 @@ pub fn calculate_grade_with_source(
         .map(|(dim, weight)| dim.score as f64 * weight)
         .sum();
 
+    let has_quality_evidence = metrics.has_strict_mode
+        || metrics.type_annotation_ratio >= 0.1
+        || metrics.functions.iter().any(|f| f.has_error_handling);
+
+    let overall_score = if !has_quality_evidence && metrics.function_count > 0 {
+        overall_score.min(75.0)
+    } else {
+        overall_score
+    };
+
     let overall_score = overall_score.clamp(0.0, 100.0);
     let grade = score_to_grade(overall_score);
     let strengths = detect_strengths(diagnostics, metrics);
@@ -78,14 +88,6 @@ fn score_structure(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Dimensi
     let mut deductions = Vec::new();
     let mut bonuses = Vec::new();
 
-    if metrics.total_lines > 1000 {
-        score -= 25;
-        deductions.push(format!("File is {} lines (very large)", metrics.total_lines));
-    } else if metrics.total_lines > 500 {
-        score -= 15;
-        deductions.push(format!("File is {} lines", metrics.total_lines));
-    }
-
     if metrics.function_count == 0 && metrics.total_lines > 20 {
         score -= 25;
         deductions.push("No functions defined, all code in global scope".to_string());
@@ -96,26 +98,30 @@ fn score_structure(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Dimensi
         deductions.push("Single function contains all logic".to_string());
     }
 
+    let mut func_penalty_total: i32 = 0;
     for func in &metrics.functions {
+        let mut func_penalty: i32 = 0;
         if func.line_count > 100 {
-            score -= 15;
+            func_penalty += 10;
             deductions.push(format!("{}() is {} lines", func.name, func.line_count));
         } else if func.line_count > 50 {
-            score -= 8;
+            func_penalty += 5;
         }
 
         if func.cyclomatic_complexity > 20 {
-            score -= 15;
+            func_penalty += 10;
             deductions.push(format!("{}() has complexity {}", func.name, func.cyclomatic_complexity));
         } else if func.cyclomatic_complexity > 10 {
-            score -= 8;
+            func_penalty += 5;
         }
 
         if func.param_count > 5 {
-            score -= 5;
+            func_penalty += 3;
             deductions.push(format!("{}() has {} parameters", func.name, func.param_count));
         }
+        func_penalty_total += func_penalty;
     }
+    score -= func_penalty_total.min(40);
 
     let avg_nesting: f64 = if metrics.functions.is_empty() {
         0.0
@@ -153,7 +159,7 @@ fn score_structure(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Dimensi
         .count();
 
     if code_quality_issues > 0 {
-        let penalty = (code_quality_issues as i32 * 2).min(20);
+        let penalty = (code_quality_issues as i32 * 1).min(10);
         score -= penalty;
         deductions.push(format!("{} code quality issues (shadowed vars, unused locals, repeated chains)", code_quality_issues));
     }
@@ -199,9 +205,44 @@ fn score_structure(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Dimensi
         bonuses.push("Low complexity across all functions".to_string());
     }
 
+    let is_data_only = metrics.function_count == 0 && metrics.total_lines > 10;
+
+    if is_data_only {
+        score = score.min(70);
+        deductions.push("Data-only file (no functions to evaluate)".to_string());
+    }
+
+    if metrics.function_count > 0 {
+        let mut missing_practices = 0;
+        if !metrics.has_strict_mode {
+            missing_practices += 1;
+        }
+        if metrics.type_annotation_ratio < 0.1 {
+            missing_practices += 1;
+        }
+        if !metrics.functions.iter().any(|f| f.has_error_handling) {
+            missing_practices += 1;
+        }
+        let has_module_pattern = metrics.detected_patterns.iter().any(|p| p == "Module Pattern");
+        if !has_module_pattern {
+            missing_practices += 1;
+        }
+
+        if missing_practices == 4 {
+            score -= 20;
+            deductions.push("Missing all good practices (no strict mode, no types, no pcall, no module pattern)".to_string());
+        } else if missing_practices >= 3 {
+            score -= 15;
+            deductions.push("Missing most good practices (strict mode, types, pcall, module pattern)".to_string());
+        } else if missing_practices >= 2 {
+            score -= 8;
+            deductions.push("Missing several good practices".to_string());
+        }
+    }
+
     DimensionScore {
         name: "Structure".to_string(),
-        score: score.clamp(0, 100) as u8,
+        score: score.clamp(15, 100) as u8,
         weight: 0.0,
         deductions,
         bonuses,
@@ -227,7 +268,7 @@ fn score_api_correctness(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> D
     let has_api_signals = metrics.service_count > 0 || deprecated_count > 0 || arg_count_errors > 0;
 
     let mut score: i32 = if !has_api_signals {
-        80
+        75
     } else {
         let mut s: i32 = 85;
         if deprecated_count == 0 { s += 5; bonuses.push("No deprecated API calls".to_string()); }
@@ -258,7 +299,7 @@ fn score_api_correctness(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> D
 
     DimensionScore {
         name: "API Correctness".to_string(),
-        score: score.clamp(0, 100) as u8,
+        score: score.clamp(15, 100) as u8,
         weight: 0.0,
         deductions,
         bonuses,
@@ -266,22 +307,31 @@ fn score_api_correctness(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> D
 }
 
 fn score_error_handling(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> DimensionScore {
-    let mut score: i32 = 100;
+    let mut score: i32 = 90;
     let mut deductions = Vec::new();
     let mut bonuses = Vec::new();
 
-    let needs_error_handling = metrics.has_strict_mode
-        || metrics.services_used.contains(&"DataStoreService".to_string())
+    let uses_risky_services = metrics.services_used.contains(&"DataStoreService".to_string())
         || metrics.services_used.contains(&"HttpService".to_string())
         || metrics.services_used.contains(&"MarketplaceService".to_string());
+
+    let has_risky_operations = metrics.service_count > 2 || metrics.function_count >= 3;
 
     let is_server = metrics.script_type == ScriptType::ServerScript;
 
     let has_any_pcall = metrics.functions.iter().any(|f| f.has_error_handling);
 
-    if needs_error_handling && !has_any_pcall {
+    if uses_risky_services && !has_any_pcall {
         score -= 35;
         deductions.push("Uses services that can fail but has no pcall/xpcall".to_string());
+    } else if has_risky_operations && !has_any_pcall && metrics.total_lines > 50 {
+        let penalty = if is_server { 30 } else { 25 };
+        score -= penalty;
+        deductions.push("No error handling in a substantial file with risky operations".to_string());
+    } else if !has_any_pcall && metrics.function_count > 0 {
+        let penalty = if is_server { 20 } else { 15 };
+        score -= penalty;
+        deductions.push("No pcall/xpcall error handling anywhere".to_string());
     }
 
     let mut bare_pcall_count = 0;
@@ -314,11 +364,6 @@ fn score_error_handling(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Di
         deductions.push(format!("{} pcall errors captured but silently swallowed (never logged)", swallowed_error_count));
     }
 
-    if !metrics.functions.is_empty() && !metrics.functions.iter().any(|f| f.has_error_handling) {
-        let penalty = if is_server { 25 } else { 15 };
-        score -= penalty;
-        deductions.push("No error handling in any function".to_string());
-    }
 
     let funcs_with_handling = metrics.functions.iter().filter(|f| f.has_error_handling).count();
     if funcs_with_handling > 0 && metrics.function_count > 0 {
@@ -331,14 +376,14 @@ fn score_error_handling(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Di
 
     DimensionScore {
         name: "Error Handling".to_string(),
-        score: score.clamp(0, 100) as u8,
+        score: score.clamp(15, 100) as u8,
         weight: 0.0,
         deductions,
         bonuses,
     }
 }
 
-fn score_performance(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> DimensionScore {
+fn score_performance(diagnostics: &[Diagnostic], _metrics: &FileMetrics) -> DimensionScore {
     let mut deductions = Vec::new();
     let bonuses = Vec::new();
 
@@ -355,12 +400,10 @@ fn score_performance(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Dimen
         }
     }
 
-    let score: i32 = if perf_issues == 0 && metrics.total_lines < 30 {
-        80
-    } else if perf_issues == 0 {
-        92
+    let score: i32 = if perf_issues == 0 {
+        82
     } else {
-        100 - perf_penalty
+        (82 - perf_penalty).max(15)
     };
 
     if perf_issues > 0 {
@@ -369,7 +412,7 @@ fn score_performance(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Dimen
 
     DimensionScore {
         name: "Performance".to_string(),
-        score: score.clamp(0, 100) as u8,
+        score: score.clamp(15, 100) as u8,
         weight: 0.0,
         deductions,
         bonuses,
@@ -386,7 +429,7 @@ fn score_readability(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Dimen
         .count();
 
     if single_letter_count > 0 {
-        let penalty = (single_letter_count as i32 * 3).min(40);
+        let penalty = (single_letter_count as i32 * 5).min(40);
         score -= penalty;
         deductions.push(format!("{} single-letter variable names", single_letter_count));
     }
@@ -451,38 +494,62 @@ fn score_readability(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Dimen
         deductions.push(format!("{} redundant boolean comparisons (== true / == false)", bool_compare_count));
     }
 
+    let abbreviated_count = diagnostics.iter()
+        .filter(|d| d.rule_id == "I033")
+        .count();
+
+    if abbreviated_count > 0 {
+        let penalty = (abbreviated_count as i32 * 3).min(20);
+        score -= penalty;
+        deductions.push(format!("{} abbreviated variable names (plr, hrp, hum, ts, etc.)", abbreviated_count));
+    }
+
+    let global_table_count = diagnostics.iter()
+        .filter(|d| d.rule_id == "A029")
+        .count();
+
+    if global_table_count > 0 {
+        let penalty = (global_table_count as i32 * 5).min(20);
+        score -= penalty;
+        deductions.push(format!("{} _G global table accesses", global_table_count));
+    }
+
     if metrics.avg_function_length > 40.0 {
         score -= 10;
         deductions.push(format!("Average function length {:.0} lines", metrics.avg_function_length));
     }
 
+    let mut cognitive_penalty: i32 = 0;
     for func in &metrics.functions {
         if func.cognitive_complexity > 15 {
-            score -= 5;
+            cognitive_penalty += 3;
             deductions.push(format!("{}() has cognitive complexity {}", func.name, func.cognitive_complexity));
         }
     }
+    score -= cognitive_penalty.min(15);
 
-    if metrics.naming_quality < 2.0 {
+    if metrics.naming_quality < 3.0 {
         score -= 30;
         deductions.push("Variable names are extremely short on average".to_string());
-    } else if metrics.naming_quality < 2.5 {
-        score -= 20;
+    } else if metrics.naming_quality < 3.5 {
+        score -= 15;
         deductions.push("Variable names are very short on average".to_string());
-    } else if metrics.naming_quality < 3.0 {
-        score -= 10;
+    } else if metrics.naming_quality < 4.0 {
+        score -= 8;
         deductions.push("Variable names are too short on average".to_string());
     }
 
     if metrics.short_function_name_count > 0 {
-        let penalty = (metrics.short_function_name_count as i32 * 3).min(20);
+        let penalty = (metrics.short_function_name_count as i32 * 5).min(20);
         score -= penalty;
         deductions.push(format!("{} functions have cryptic names (1-2 chars)", metrics.short_function_name_count));
     }
 
-    if metrics.total_lines > 50 && metrics.comment_line_count == 0 {
-        score -= 15;
-        deductions.push("No comments in a file with 50+ lines".to_string());
+    if metrics.function_count > 0 && metrics.comment_line_count == 0 {
+        let has_type_annotations = metrics.type_annotation_count > 0;
+        let penalty = if has_type_annotations { 5 } else { 15 };
+        score -= penalty;
+        deductions.push("No comments in file".to_string());
     }
 
     if metrics.consistency_score < 0.8 && metrics.consistency_score > 0.0 {
@@ -509,7 +576,10 @@ fn score_readability(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Dimen
         bonuses.push("Descriptive variable names".to_string());
     }
 
-    if metrics.has_strict_mode {
+    if !metrics.has_strict_mode && metrics.function_count > 0 {
+        score -= 10;
+        deductions.push("No --!strict mode".to_string());
+    } else if metrics.has_strict_mode {
         score += 3;
         bonuses.push("Uses strict mode".to_string());
     }
@@ -525,10 +595,10 @@ fn score_readability(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Dimen
         bonuses.push("Good comment-to-code ratio".to_string());
     }
 
-    if metrics.total_lines > 30 && metrics.function_count > 0 {
+    if metrics.function_count > 0 {
         if metrics.type_annotation_ratio < 0.1 {
             score -= 15;
-            deductions.push("Almost no type annotations in a substantial file".to_string());
+            deductions.push("Almost no type annotations".to_string());
         } else if metrics.type_annotation_ratio < 0.3 {
             score -= 8;
             deductions.push("Low type annotation coverage".to_string());
@@ -540,7 +610,7 @@ fn score_readability(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> Dimen
 
     DimensionScore {
         name: "Readability".to_string(),
-        score: score.clamp(0, 100) as u8,
+        score: score.clamp(10, 100) as u8,
         weight: 0.0,
         deductions,
         bonuses,
@@ -613,7 +683,7 @@ fn score_safety(diagnostics: &[Diagnostic], metrics: &FileMetrics) -> DimensionS
 
     DimensionScore {
         name: "Safety".to_string(),
-        score: score.clamp(0, 100) as u8,
+        score: score.clamp(15, 100) as u8,
         weight: 0.0,
         deductions,
         bonuses,
@@ -635,7 +705,7 @@ fn score_security(diagnostics: &[Diagnostic], metrics: &FileMetrics, source: &st
     if !has_security_surface {
         return DimensionScore {
             name: "Security".to_string(),
-            score: 80,
+            score: 75,
             weight: 0.0,
             deductions,
             bonuses,

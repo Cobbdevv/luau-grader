@@ -470,6 +470,9 @@ impl ConstructorArgCountRule {
                 if let Some(Suffix::Index(Index::Dot { name: method, .. })) = suffixes.first() {
                     let method_name = method.token().to_string();
                     if let Some(Suffix::Call(Call::AnonymousCall(args))) = suffixes.get(1) {
+                        if has_variadic_last_arg(args) {
+                            return Vec::new();
+                        }
                         let arg_count = count_function_args(args);
                         for (pn, mn, valid) in CONSTRUCTORS {
                             if *pn == prefix_name && *mn == method_name {
@@ -544,11 +547,26 @@ impl Rule for MethodArgCountRule {
 }
 impl MethodArgCountRule {
     fn check_call(&self, call: &ast::FunctionCall) -> Vec<Diagnostic> {
+        let prefix_text = format!("{}", call.prefix());
+        let suffixes_vec: Vec<_> = call.suffixes().collect();
+
+        let has_chained_methods = suffixes_vec.len() > 1;
+        let is_likely_instance = prefix_text == "script" || prefix_text == "workspace"
+            || prefix_text == "game" || prefix_text == "self"
+            || has_chained_methods;
+
         for suffix in call.suffixes() {
             if let Suffix::Call(Call::MethodCall(method)) = suffix {
                 let method_name = method.name().token().to_string();
+                if has_variadic_last_arg(method.args()) {
+                    continue;
+                }
                 for (name, min, max) in KNOWN_METHODS {
                     if *name == method_name {
+                        if (*name == "Destroy" || *name == "Clone") && !is_likely_instance {
+                            break;
+                        }
+
                         let arg_count = match method.args() {
                             ast::FunctionArgs::Parentheses { arguments, .. } => arguments.len(),
                             ast::FunctionArgs::String(_) => 1,
@@ -679,6 +697,9 @@ impl StdLibArgCountRule {
                 if let Some(Suffix::Index(Index::Dot { name: method, .. })) = suffixes.first() {
                     let method_name = method.token().to_string();
                     if let Some(Suffix::Call(Call::AnonymousCall(args))) = suffixes.get(1) {
+                        if has_variadic_last_arg(args) {
+                            return Vec::new();
+                        }
                         let arg_count = count_function_args(args);
                         for (lib, func, min, max) in STDLIB_FUNCTIONS {
                             if *lib == prefix_name && *func == method_name {
@@ -707,6 +728,9 @@ impl StdLibArgCountRule {
 
             if suffixes.len() == 1 {
                 if let Some(Suffix::Call(Call::AnonymousCall(args))) = suffixes.first() {
+                    if has_variadic_last_arg(args) {
+                        return Vec::new();
+                    }
                     let arg_count = count_function_args(args);
                     for (func, min, max) in GLOBAL_FUNCTIONS {
                         if *func == prefix_name {
@@ -743,4 +767,13 @@ pub fn count_function_args(args: &ast::FunctionArgs) -> usize {
         ast::FunctionArgs::TableConstructor(_) => 1,
         _ => 0,
     }
+}
+
+pub fn has_variadic_last_arg(args: &ast::FunctionArgs) -> bool {
+    if let ast::FunctionArgs::Parentheses { arguments, .. } = args {
+        if let Some(last) = arguments.iter().last() {
+            return matches!(last, ast::Expression::FunctionCall(_));
+        }
+    }
+    false
 }

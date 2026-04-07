@@ -409,14 +409,36 @@ impl Rule for RenderSteppedOnServerRule {
     fn category(&self) -> &'static str { "Common Bugs" }
     fn description(&self) -> &'static str { "RenderStepped only fires on client - this will never run on server" }
     fn tier(&self) -> &'static str { "Front Page" }
-    fn check_expression(&self, expr: &ast::Expression, _ctx: &AnalysisContext) -> Vec<Diagnostic> {
-        if let ast::Expression::Var(ast::Var::Expression(var_expr)) = expr {
-            let full = format!("{var_expr}");
-            if full.contains("RenderStepped") {
+    fn finalize(&self, ctx: &AnalysisContext) -> Vec<Diagnostic> {
+        if !ctx.source.contains("RenderStepped") {
+            return Vec::new();
+        }
+
+        let client_indicators = ["LocalPlayer", "PlayerGui", "StarterPlayerScripts",
+            "StarterCharacterScripts", "UserInputService", "ContextActionService",
+            "GetMouse", "Camera", "CurrentCamera"];
+        let is_likely_client = client_indicators.iter().any(|ind| ctx.source.contains(ind));
+
+        if is_likely_client {
+            return Vec::new();
+        }
+
+        let server_indicators = ["OnServerEvent", "OnServerInvoke", "ServerScriptService",
+            "ServerStorage", "DataStoreService"];
+        let is_likely_server = server_indicators.iter().any(|ind| ctx.source.contains(ind));
+
+        if !is_likely_server {
+            return Vec::new();
+        }
+
+        for (i, line) in ctx.source.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("--") { continue; }
+            if trimmed.contains("RenderStepped") {
                 return vec![Diagnostic {
                     rule_id: self.id().to_string(), severity: self.severity(), category: self.category().to_string(),
                     message: "RenderStepped only fires on the client - on a server script this event will never fire".to_string(),
-                    span: span_from_node(expr),
+                    span: Some(Span { line: i + 1, column: 1 }),
                     suggestion: Some("use Heartbeat or Stepped for server-side per-frame logic".to_string()),
                     fixable: false,
                 }];
@@ -425,6 +447,7 @@ impl Rule for RenderSteppedOnServerRule {
         Vec::new()
     }
 }
+
 
 #[derive(Debug)] pub struct WaitReturnValueRule;
 impl Rule for WaitReturnValueRule {

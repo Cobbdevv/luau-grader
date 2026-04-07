@@ -1,4 +1,4 @@
-use full_moon::ast::{self, Prefix, Suffix, Call, Index};
+use full_moon::ast::{self, Prefix, Suffix, Call};
 use full_moon::node::Node;
 use crate::analyzer::context::AnalysisContext;
 use crate::report::{Diagnostic, Severity, Span};
@@ -12,51 +12,38 @@ fn span_from_node(node: &impl Node) -> Option<Span> {
 pub struct UnvalidatedRemoteArgsRule;
 impl Rule for UnvalidatedRemoteArgsRule {
     fn id(&self) -> &'static str { "S001" }
-    fn severity(&self) -> Severity { Severity::Error }
+    fn severity(&self) -> Severity { Severity::Warning }
     fn category(&self) -> &'static str { "Security" }
     fn description(&self) -> &'static str { "OnServerEvent handler does not validate arguments" }
     fn tier(&self) -> &'static str { "Advanced" }
-    fn check_expression(&self, expr: &ast::Expression, _ctx: &AnalysisContext) -> Vec<Diagnostic> {
-        if let ast::Expression::FunctionCall(call) = expr {
-            return self.check_call(call);
+    fn finalize(&self, ctx: &AnalysisContext) -> Vec<Diagnostic> {
+        let has_on_server = ctx.source.contains("OnServerEvent") || ctx.source.contains("OnServerInvoke");
+        if !has_on_server {
+            return Vec::new();
         }
-        Vec::new()
-    }
-    fn check_stmt(&self, stmt: &ast::Stmt, _ctx: &AnalysisContext) -> Vec<Diagnostic> {
-        if let ast::Stmt::FunctionCall(call) = stmt {
-            return self.check_call(call);
+
+        let has_validation = ctx.source.contains("typeof(")
+            || ctx.source.contains("type(")
+            || ctx.source.contains("assert(")
+            || ctx.source.contains("tonumber(")
+            || ctx.source.contains("tostring(");
+
+        if has_validation {
+            return Vec::new();
         }
-        Vec::new()
-    }
-}
-impl UnvalidatedRemoteArgsRule {
-    fn check_call(&self, call: &ast::FunctionCall) -> Vec<Diagnostic> {
-        let suffixes: Vec<_> = call.suffixes().collect();
-        for (i, suffix) in suffixes.iter().enumerate() {
-            if let Suffix::Index(Index::Dot { name, .. }) = suffix {
-                let prop_name = name.token().to_string();
-                if prop_name == "OnServerEvent" || prop_name == "OnServerInvoke" {
-                    if i + 1 < suffixes.len() {
-                        if let Some(Suffix::Call(Call::MethodCall(method))) = suffixes.get(i + 1) {
-                            if method.name().token().to_string() == "Connect" {
-                                return vec![Diagnostic {
-                                    rule_id: self.id().to_string(),
-                                    severity: self.severity(),
-                                    category: self.category().to_string(),
-                                    message: "Remote event handler should validate all arguments from the client".to_string(),
-                                    span: span_from_node(call),
-                                    suggestion: Some("Check types and ranges of all arguments before using them".to_string()),
-                                    fixable: false,
-                                }];
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Vec::new()
+
+        vec![Diagnostic {
+            rule_id: self.id().to_string(),
+            severity: self.severity(),
+            category: self.category().to_string(),
+            message: "Remote event handler should validate all arguments from the client".to_string(),
+            span: Some(Span { line: 1, column: 1 }),
+            suggestion: Some("Check types and ranges of all arguments before using them".to_string()),
+            fixable: false,
+        }]
     }
 }
+
 
 #[derive(Debug)]
 pub struct TrustClientPositionRule;

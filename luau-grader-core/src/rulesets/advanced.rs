@@ -9,6 +9,54 @@ fn span_from_node(node: &impl Node) -> Option<Span> {
     node.start_position().map(|pos| Span { line: pos.line(), column: pos.character() })
 }
 
+fn strip_string_contents(line: &str) -> String {
+    let mut result = String::with_capacity(line.len());
+    let mut in_string = false;
+    let mut string_char = '"';
+    let bytes = line.as_bytes();
+    let mut idx = 0;
+    while idx < bytes.len() {
+        let ch = bytes[idx] as char;
+        if in_string {
+            if ch == string_char {
+                result.push(ch);
+                in_string = false;
+            } else {
+                result.push(' ');
+            }
+        } else if ch == '"' || ch == '\'' {
+            in_string = true;
+            string_char = ch;
+            result.push(ch);
+        } else {
+            result.push(ch);
+        }
+        idx += 1;
+    }
+    result
+}
+
+fn count_keyword_occurrences(line: &str, keyword: &str) -> usize {
+    let mut count = 0;
+    let mut search_from = 0;
+    let bytes = line.as_bytes();
+    let kw_len = keyword.len();
+    while let Some(pos) = line[search_from..].find(keyword) {
+        let abs = search_from + pos;
+        let before_ok = abs == 0
+            || (!bytes[abs - 1].is_ascii_alphanumeric() && bytes[abs - 1] != b'_');
+        let after_pos = abs + kw_len;
+        let after_ok = after_pos >= bytes.len()
+            || (!bytes[after_pos].is_ascii_alphanumeric() && bytes[after_pos] != b'_');
+        if before_ok && after_ok {
+            count += 1;
+        }
+        search_from = abs + 1;
+    }
+    count
+}
+
+
 #[derive(Debug)] pub struct InstanceNewInLoopRule;
 impl Rule for InstanceNewInLoopRule {
     fn id(&self) -> &'static str { "A001" }
@@ -82,18 +130,38 @@ impl Rule for StringConcatInLoopRule {
     fn category(&self) -> &'static str { "Performance" }
     fn description(&self) -> &'static str { "String concatenation (..) inside loops" }
     fn tier(&self) -> &'static str { "Advanced" }
-    fn check_expression(&self, expr: &ast::Expression, ctx: &AnalysisContext) -> Vec<Diagnostic> {
+    fn check_stmt(&self, stmt: &ast::Stmt, ctx: &AnalysisContext) -> Vec<Diagnostic> {
         if !ctx.in_loop() { return Vec::new(); }
-        if let ast::Expression::BinaryOperator { binop, .. } = expr
-            && matches!(binop, BinOp::TwoDots(_)) {
-                return vec![Diagnostic { rule_id: self.id().to_string(), severity: self.severity(), category: self.category().to_string(),
-                    message: "string concatenation in a loop - use table.insert() and table.concat()".to_string(),
-                    span: expr.start_position().map(|p| Span { line: p.line(), column: p.character() }),
-                    suggestion: Some("table.insert(parts, str); result = table.concat(parts)".to_string()),
-                    fixable: false,
-                }];
+        if let ast::Stmt::Assignment(assign) = stmt {
+            for expr in assign.expressions() {
+                if Self::has_concat_with_self(assign, expr) {
+                    return vec![Diagnostic {
+                        rule_id: self.id().to_string(), severity: self.severity(), category: self.category().to_string(),
+                        message: "string concatenation accumulating in a loop - use table.insert() and table.concat()".to_string(),
+                        span: stmt.start_position().map(|p| Span { line: p.line(), column: p.character() }),
+                        suggestion: Some("table.insert(parts, str); result = table.concat(parts)".to_string()),
+                        fixable: false,
+                    }];
+                }
             }
+        }
         Vec::new()
+    }
+}
+impl StringConcatInLoopRule {
+    fn has_concat_with_self(assign: &ast::Assignment, expr: &ast::Expression) -> bool {
+        if let ast::Expression::BinaryOperator { lhs, binop, .. } = expr {
+            if matches!(binop, BinOp::TwoDots(_)) {
+                let lhs_text = format!("{lhs}").trim().to_string();
+                for var in assign.variables() {
+                    let var_text = format!("{var}").trim().to_string();
+                    if var_text == lhs_text {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }
 }
 
@@ -371,6 +439,9 @@ impl Rule for DeprecatedLoadAnimationRule {
 }
 impl DeprecatedLoadAnimationRule {
     fn check_call(&self, call: &ast::FunctionCall) -> Vec<Diagnostic> {
+        let call_text = format!("{call}");
+        if call_text.contains("Animator") { return Vec::new(); }
+
         for suffix in call.suffixes() {
             if let Suffix::Call(Call::MethodCall(method)) = suffix {
                 if method.name().token().to_string() == "LoadAnimation" {
@@ -479,12 +550,23 @@ impl Rule for UnreachableCodeRule {
         let mut results = Vec::new();
         let mut prev_was_terminal = false;
         let mut terminal_line = 0;
+        let mut func_depth: i32 = 0;
         for (i, line) in ctx.source.lines().enumerate() {
             let trimmed = line.trim();
             if trimmed.starts_with("--") || trimmed.is_empty() {
                 continue;
             }
-            if prev_was_terminal {
+            let stripped = strip_string_contents(trimmed);
+            if stripped.contains("function") {
+                func_depth += 1;
+                prev_was_terminal = false;
+            }
+            if func_depth > 0 && stripped.contains("end") {
+                func_depth -= 1;
+                prev_was_terminal = false;
+                continue;
+            }
+            if prev_was_terminal && func_depth == 0 {
                 if trimmed == "end" || trimmed == "else" || trimmed == "elseif"
                     || trimmed.starts_with("end)") || trimmed.starts_with("end,")
                     || trimmed == "until" {
@@ -500,10 +582,12 @@ impl Rule for UnreachableCodeRule {
                 });
                 prev_was_terminal = false;
             }
-            if trimmed.starts_with("return") || trimmed == "break" || trimmed == "continue"
-                || trimmed.starts_with("error(") {
-                prev_was_terminal = true;
-                terminal_line = i + 1;
+            if func_depth == 0 {
+                if trimmed.starts_with("return") || trimmed == "break" || trimmed == "continue"
+                    || trimmed.starts_with("error(") {
+                    prev_was_terminal = true;
+                    terminal_line = i + 1;
+                }
             }
         }
         results
@@ -518,7 +602,7 @@ impl Rule for TableRemoveForwardLoopRule {
     fn description(&self) -> &'static str { "table.remove() in a forward for loop skips elements" }
     fn tier(&self) -> &'static str { "Advanced" }
     fn check_stmt(&self, stmt: &ast::Stmt, ctx: &AnalysisContext) -> Vec<Diagnostic> {
-        if !ctx.in_loop() { return Vec::new(); }
+        if !ctx.in_loop() || ctx.in_generic_for { return Vec::new(); }
         if let ast::Stmt::FunctionCall(call) = stmt {
             if let Prefix::Name(name) = call.prefix() {
                 if name.token().to_string() == "table" {
@@ -704,6 +788,9 @@ impl StringFormatMismatchRule {
                 if let Some(Suffix::Index(Index::Dot { name: method, .. })) = suffixes.first() {
                     if method.token().to_string() == "format" {
                         if let Some(Suffix::Call(Call::AnonymousCall(ast::FunctionArgs::Parentheses { arguments, .. }))) = suffixes.get(1) {
+                            if arguments.iter().last().map_or(false, |a| matches!(a, ast::Expression::FunctionCall(_))) {
+                                return Vec::new();
+                            }
                             let arg_count = arguments.len();
                             if arg_count >= 1 {
                                 if let Some(ast::Expression::String(fmt_str)) = arguments.iter().next() {
@@ -769,12 +856,12 @@ impl Rule for FindFirstChildInLoopRule {
     fn description(&self) -> &'static str { "FindFirstChild() inside a loop - cache the result" }
     fn tier(&self) -> &'static str { "Advanced" }
     fn check_stmt(&self, stmt: &ast::Stmt, ctx: &AnalysisContext) -> Vec<Diagnostic> {
-        if !ctx.in_loop() { return Vec::new(); }
+        if !ctx.in_loop() || ctx.in_generic_for { return Vec::new(); }
         if let ast::Stmt::FunctionCall(call) = stmt { return self.check_call(call); }
         Vec::new()
     }
     fn check_expression(&self, expr: &ast::Expression, ctx: &AnalysisContext) -> Vec<Diagnostic> {
-        if !ctx.in_loop() { return Vec::new(); }
+        if !ctx.in_loop() || ctx.in_generic_for { return Vec::new(); }
         if let ast::Expression::FunctionCall(call) = expr { return self.check_call(call); }
         Vec::new()
     }
@@ -799,6 +886,20 @@ impl FindFirstChildInLoopRule {
     }
 }
 
+const KNOWN_ROBLOX_GLOBALS: &[&str] = &[
+    "game", "workspace", "script", "plugin", "shared", "_G",
+    "Enum", "Instance", "Vector3", "Vector2", "CFrame", "Color3",
+    "UDim", "UDim2", "TweenInfo", "NumberRange", "NumberSequence",
+    "ColorSequence", "BrickColor", "Rect", "Region3", "Ray",
+    "Random", "RaycastParams", "OverlapParams", "PhysicalProperties",
+    "task", "debug", "bit32", "utf8", "os", "coroutine",
+    "math", "string", "table", "buffer",
+    "print", "warn", "error", "require", "typeof", "type",
+    "tostring", "tonumber", "select", "pairs", "ipairs", "next",
+    "pcall", "xpcall", "assert", "rawget", "rawset", "rawequal", "rawlen",
+    "setmetatable", "getmetatable", "unpack", "tick",
+];
+
 #[derive(Debug)] pub struct GlobalWriteRule;
 impl Rule for GlobalWriteRule {
     fn id(&self) -> &'static str { "A022" }
@@ -806,21 +907,24 @@ impl Rule for GlobalWriteRule {
     fn category(&self) -> &'static str { "Code Quality" }
     fn description(&self) -> &'static str { "Writing to global scope without local keyword" }
     fn tier(&self) -> &'static str { "Advanced" }
-    fn check_stmt(&self, stmt: &ast::Stmt, _ctx: &AnalysisContext) -> Vec<Diagnostic> {
+    fn check_stmt(&self, stmt: &ast::Stmt, ctx: &AnalysisContext) -> Vec<Diagnostic> {
         if let ast::Stmt::Assignment(assignment) = stmt {
             for var in assignment.variables() {
                 if let ast::Var::Name(name) = var {
                     let var_name = name.token().to_string();
-                    let known_globals = ["game", "workspace", "script", "plugin", "shared", "_G"];
-                    if !known_globals.contains(&var_name.as_str()) {
-                        return vec![Diagnostic {
-                            rule_id: self.id().to_string(), severity: self.severity(), category: self.category().to_string(),
-                            message: format!("'{var_name}' assigned without local keyword - this writes to global scope"),
-                            span: span_from_node(stmt),
-                            suggestion: Some(format!("use `local {var_name} = ...` instead")),
-                            fixable: false,
-                        }];
+                    if KNOWN_ROBLOX_GLOBALS.contains(&var_name.as_str()) {
+                        continue;
                     }
+                    if ctx.is_declared_local(&var_name) {
+                        continue;
+                    }
+                    return vec![Diagnostic {
+                        rule_id: self.id().to_string(), severity: self.severity(), category: self.category().to_string(),
+                        message: format!("'{var_name}' assigned without local keyword - this writes to global scope"),
+                        span: span_from_node(stmt),
+                        suggestion: Some(format!("use `local {var_name} = ...` instead")),
+                        fixable: false,
+                    }];
                 }
             }
         }
@@ -942,13 +1046,14 @@ impl Rule for NestedPcallRule {
     fn finalize(&self, ctx: &AnalysisContext) -> Vec<Diagnostic> {
         let mut results = Vec::new();
         let mut pcall_depth = 0i32;
-        let mut pcall_start_lines: Vec<usize> = Vec::new();
 
         for (i, line) in ctx.source.lines().enumerate() {
             let trimmed = line.trim();
             if trimmed.starts_with("--") { continue; }
 
-            if trimmed.contains("pcall(") || trimmed.contains("xpcall(") {
+            let stripped = strip_string_contents(trimmed);
+
+            if stripped.contains("pcall(") || stripped.contains("xpcall(") {
                 if pcall_depth > 0 {
                     results.push(Diagnostic {
                         rule_id: self.id().to_string(), severity: self.severity(), category: self.category().to_string(),
@@ -959,14 +1064,12 @@ impl Rule for NestedPcallRule {
                     });
                 }
                 pcall_depth += 1;
-                pcall_start_lines.push(i);
             }
 
-            let ends = trimmed.matches("end").count();
-            for _ in 0..ends {
+            let end_count = count_keyword_occurrences(&stripped, "end");
+            for _ in 0..end_count {
                 if pcall_depth > 0 {
                     pcall_depth -= 1;
-                    pcall_start_lines.pop();
                 }
             }
         }
@@ -1048,11 +1151,21 @@ impl Rule for PcallErrorSwallowedRule {
             let err_var = parts[1].trim().split(':').next().unwrap_or("").trim();
             if err_var.is_empty() || err_var == "_" { continue; }
 
-            let search_end = (i + 15).min(lines.len());
-            let mut err_used = false;
+            let search_end = (i + 20).min(lines.len());
+            let mut err_handled = false;
             for check_line in &lines[i + 1..search_end] {
                 let check_trimmed = check_line.trim();
                 if check_trimmed.starts_with("--") { continue; }
+
+                if check_trimmed.contains("return")
+                    || check_trimmed.contains("break")
+                    || check_trimmed.contains("continue")
+                    || check_trimmed.contains("error(")
+                {
+                    err_handled = true;
+                    break;
+                }
+
                 if Self::line_uses_var(check_trimmed, err_var) {
                     if check_trimmed.contains("warn(") || check_trimmed.contains("error(")
                         || check_trimmed.contains("print(") || check_trimmed.contains(&format!(".. {err_var}"))
@@ -1061,13 +1174,13 @@ impl Rule for PcallErrorSwallowedRule {
                         || check_trimmed.contains(&format!("({err_var}"))
                         || check_trimmed.contains(&format!("tostring({err_var}"))
                     {
-                        err_used = true;
+                        err_handled = true;
                         break;
                     }
                 }
             }
 
-            if !err_used {
+            if !err_handled {
                 results.push(Diagnostic {
                     rule_id: self.id().to_string(), severity: self.severity(), category: self.category().to_string(),
                     message: format!("pcall error variable '{err_var}' is captured but never logged or used"),
@@ -1145,6 +1258,51 @@ impl Rule for ConnectWhenOnceSufficesRule {
             }
         }
         results
+    }
+}
+
+#[derive(Debug)] pub struct GlobalTableUsageRule;
+impl Rule for GlobalTableUsageRule {
+    fn id(&self) -> &'static str { "A029" }
+    fn severity(&self) -> Severity { Severity::Warning }
+    fn category(&self) -> &'static str { "Code Quality" }
+    fn description(&self) -> &'static str { "_G table usage creates implicit global dependencies between scripts" }
+    fn tier(&self) -> &'static str { "Advanced" }
+    fn check_expression(&self, expr: &ast::Expression, _ctx: &AnalysisContext) -> Vec<Diagnostic> {
+        if let ast::Expression::Var(ast::Var::Expression(var_expr)) = expr {
+            if let Prefix::Name(name) = var_expr.prefix() {
+                if name.token().to_string() == "_G" {
+                    return vec![Diagnostic {
+                        rule_id: self.id().to_string(), severity: self.severity(), category: self.category().to_string(),
+                        message: "_G table access creates implicit global state - use ModuleScripts and require() instead".to_string(),
+                        span: span_from_node(expr),
+                        suggestion: Some("move shared state into a ModuleScript and use require()".to_string()),
+                        fixable: false,
+                    }];
+                }
+            }
+        }
+        Vec::new()
+    }
+    fn check_stmt(&self, stmt: &ast::Stmt, _ctx: &AnalysisContext) -> Vec<Diagnostic> {
+        if let ast::Stmt::Assignment(assignment) = stmt {
+            for var in assignment.variables() {
+                if let ast::Var::Expression(var_expr) = var {
+                    if let Prefix::Name(name) = var_expr.prefix() {
+                        if name.token().to_string() == "_G" {
+                            return vec![Diagnostic {
+                                rule_id: self.id().to_string(), severity: self.severity(), category: self.category().to_string(),
+                                message: "_G table write creates implicit global state - use ModuleScripts and require() instead".to_string(),
+                                span: span_from_node(stmt),
+                                suggestion: Some("move shared state into a ModuleScript and use require()".to_string()),
+                                fixable: false,
+                            }];
+                        }
+                    }
+                }
+            }
+        }
+        Vec::new()
     }
 }
 
