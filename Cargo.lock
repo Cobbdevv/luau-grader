@@ -1968,7 +1968,7 @@ checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
 name = "luau-grader-app"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "luau-grader-core",
  "rfd 0.17.2",
@@ -1981,7 +1981,7 @@ dependencies = [
 
 [[package]]
 name = "luau-grader-cli"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "clap",
  "colored",
@@ -1991,7 +1991,7 @@ dependencies = [
 
 [[package]]
 name = "luau-grader-core"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "full_moon",
  "serde",
@@ -2001,7 +2001,7 @@ dependencies = [
 
 [[package]]
 name = "luau-grader-wasm"
-version = "1.0.0"
+version = "1.2.1"
 dependencies = [
  "luau-grader-core",
  "serde",

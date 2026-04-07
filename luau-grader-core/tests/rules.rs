@@ -468,6 +468,18 @@ fn i005_non_empty_if() {
 }
 
 #[test]
+fn i005_guard_clause_return() {
+    let ids = grade("if not x then\n    return\nend\n", Tier::Intermediate);
+    assert!(!ids.contains(&"I005".to_string()));
+}
+
+#[test]
+fn i005_guard_clause_continue() {
+    let ids = grade("for i = 1, 10 do\n    if i == 5 then\n        continue\n    end\nend\n", Tier::Intermediate);
+    assert!(!ids.contains(&"I005".to_string()));
+}
+
+#[test]
 fn i006_tostring_on_string() {
     let ids = grade("local s = tostring(\"hello\")\n", Tier::Intermediate);
     assert!(ids.contains(&"I006".to_string()));
@@ -855,8 +867,8 @@ fn i021_negated_condition() {
 
 #[test]
 fn a013_unreachable_code() {
-    let ids = grade("local function foo()\n    if true then\n        return 1\n    end\n    return 2\nend\n", Tier::Advanced);
-    assert!(!ids.is_empty());
+    let ids = grade("error('fatal')\nprint('unreachable')\n", Tier::Advanced);
+    assert!(ids.contains(&"A013".to_string()));
 }
 
 #[test]

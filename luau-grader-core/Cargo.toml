@@ -1,6 +1,6 @@
 [package]
 name = "luau-grader-core"
-version = "1.2.0"
+version = "1.2.1"
 edition = "2024"
 description = "Static analysis and grading engine for Luau code"
 license = "MIT"

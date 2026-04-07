@@ -254,7 +254,7 @@ impl Rule for EmptyIfBodyRule {
     fn tier(&self) -> &'static str { "Intermediate" }
     fn check_stmt(&self, stmt: &ast::Stmt, _ctx: &AnalysisContext) -> Vec<Diagnostic> {
         if let ast::Stmt::If(if_stmt) = stmt {
-            if if_stmt.block().stmts().count() == 0 {
+            if if_stmt.block().stmts().count() == 0 && if_stmt.block().last_stmt().is_none() {
                 return vec![Diagnostic {
                     rule_id: self.id().to_string(), severity: self.severity(), category: self.category().to_string(),
                     message: "empty if block - this may be unfinished code".to_string(),
@@ -265,7 +265,7 @@ impl Rule for EmptyIfBodyRule {
             }
             if let Some(else_ifs) = if_stmt.else_if() {
                 for branch in else_ifs {
-                    if branch.block().stmts().count() == 0 {
+                    if branch.block().stmts().count() == 0 && branch.block().last_stmt().is_none() {
                         return vec![Diagnostic {
                             rule_id: self.id().to_string(), severity: self.severity(), category: self.category().to_string(),
                             message: "empty elseif block - this may be unfinished code".to_string(),
@@ -277,7 +277,7 @@ impl Rule for EmptyIfBodyRule {
                 }
             }
             if let Some(else_block) = if_stmt.else_block() {
-                if else_block.stmts().count() == 0 {
+                if else_block.stmts().count() == 0 && else_block.last_stmt().is_none() {
                     return vec![Diagnostic {
                         rule_id: self.id().to_string(), severity: self.severity(), category: self.category().to_string(),
                         message: "empty else block - this may be unfinished code".to_string(),
